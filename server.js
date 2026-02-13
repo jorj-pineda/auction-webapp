@@ -28,16 +28,21 @@ db.run(`CREATE TABLE IF NOT EXISTS items (
 )`);
 
 // Seed Data (Run this once, then comment out if you want)
-// db.run(`INSERT INTO items (name, description, image_url, current_bid) VALUES 
-//     ('Community Spirit', 'Acrylic on Canvas by Student A', 'https://placehold.co/600x400', 50.00)`);
+db.run(`INSERT INTO items (name, description, image_url, current_bid) VALUES ('Community Spirit', 'Acrylic on Canvas by Student A', 'https://placehold.co/600x400', 50.00)`);
 
 
 // 2. Email Configuration (Nodemailer)
+// 2. Email Configuration (Nodemailer for Office 365/Outlook)
 const transporter = nodemailer.createTransport({
-    service: 'outlook', // Or 'outlook', 'yahoo', etc.
+    host: "smtp.office365.com", // Standard server for Office 365/Outlook
+    port: 587,                  // Standard port
+    secure: false,              // False for port 587 (it uses STARTTLS upgrade)
     auth: {
-        user: 'servicestation@austincolelge.edu', // REPLACE THIS
-        pass: 'Service26!' // REPLACE THIS (Not your normal login password)
+        user: 'servicestation@austincollege.edu', // Fixed typo here
+        pass: 'Service26!' 
+    },
+    tls: {
+        ciphers: 'SSLv3' // Helps with some strict corporate firewalls
     }
 });
 
@@ -61,17 +66,21 @@ app.get('/item/:id', (req, res) => {
 });
 
 // Handle the Bid
+// Handle the Bid
 app.post('/bid/:id', (req, res) => {
     const id = req.params.id;
     const newBid = parseFloat(req.body.amount);
-    const email = req.body.email;
+    const email = req.body.email; // The NEW bidder's email
     const name = req.body.name;
 
     db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
+        if (err) return console.error(err.message); // Safety check
+
         if (newBid > item.current_bid) {
             
-            // A. NOTIFY PREVIOUS BIDDER (The "Out-bid" Feature)
-            if (item.bidder_email) {
+            // A. NOTIFY PREVIOUS BIDDER (Only if it's a DIFFERENT person)
+            // Added check: item.bidder_email !== email
+            if (item.bidder_email && item.bidder_email !== email) {
                 const mailOptions = {
                     from: 'servicestation@austincollege.edu',
                     to: item.bidder_email,
@@ -90,8 +99,6 @@ app.post('/bid/:id', (req, res) => {
                 [newBid, email, name, id], 
                 (err) => {
                     if (err) return console.error(err.message);
-                    
-                    // Success! Reload page with message
                     res.render('item', { item: { ...item, current_bid: newBid, bidder_name: name }, message: "Bid placed successfully!" });
                 }
             );

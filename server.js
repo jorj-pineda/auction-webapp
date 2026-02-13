@@ -10,45 +10,58 @@ app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// 1. Database Setup (SQLite)
+// 1. Database Setup (Wrapped in serialize to prevent crashes)
 const db = new sqlite3.Database('./auction.db', (err) => {
     if (err) console.error(err.message);
     console.log('Connected to the auction database.');
 });
 
-// Create Table
-db.run(`CREATE TABLE IF NOT EXISTS items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    description TEXT,
-    image_url TEXT,
-    current_bid REAL DEFAULT 0,
-    bidder_email TEXT,
-    bidder_name TEXT
-)`);
+db.serialize(() => {
+    // A. Create the Table
+    db.run(`CREATE TABLE IF NOT EXISTS items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        description TEXT,
+        image_url TEXT,
+        current_bid REAL DEFAULT 0,
+        bidder_email TEXT,
+        bidder_name TEXT
+    )`);
 
-// Seed Data (Run this once, then comment out if you want)
-db.run(`INSERT INTO items (name, description, image_url, current_bid) VALUES ('Community Spirit', 'Acrylic on Canvas by Student A', 'https://placehold.co/600x400', 50.00)`);
+    // B. "Smart" Seed Data
+    // Only insert art if the table is empty!
+    db.get("SELECT count(*) as count FROM items", (err, row) => {
+        if (err) return console.error(err);
+        
+        if (row.count === 0) {
+            console.log("Database is empty. Seeding initial art items...");
+            const stmt = db.prepare("INSERT INTO items (name, description, image_url, current_bid) VALUES (?, ?, ?, ?)");
+            stmt.run('Community Spirit', 'Acrylic on Canvas by Student A', 'https://placehold.co/600x400', 50.00);
+            stmt.run('Senegal Sunrise', 'Oil on Canvas by Student B', 'https://placehold.co/600x400', 75.00);
+            stmt.finalize();
+        } else {
+            console.log("Database already has items. Skipping seed.");
+        }
+    });
+});
 
-
-// 2. Email Configuration (Nodemailer)
-// 2. Email Configuration (Nodemailer for Office 365/Outlook)
+// 2. Email Configuration (Corrected for Austin College / Office 365)
 const transporter = nodemailer.createTransport({
-    host: "smtp.office365.com", // Standard server for Office 365/Outlook
-    port: 587,                  // Standard port
-    secure: false,              // False for port 587 (it uses STARTTLS upgrade)
+    host: "smtp.office365.com", 
+    port: 587,
+    secure: false, // STARTTLS
     auth: {
-        user: 'servicestation@austincollege.edu', // Fixed typo here
+        user: 'servicestation@austincollege.edu', // Typo fixed
         pass: 'Service26!' 
     },
     tls: {
-        ciphers: 'SSLv3' // Helps with some strict corporate firewalls
+        ciphers: 'SSLv3'
     }
 });
 
 // 3. Routes
 
-// Home Page - List all items
+// Home Page
 app.get('/', (req, res) => {
     db.all("SELECT * FROM items", [], (err, rows) => {
         if (err) return console.error(err.message);
@@ -56,31 +69,33 @@ app.get('/', (req, res) => {
     });
 });
 
-// Item Detail Page - Where they bid
+// Item Detail Page
 app.get('/item/:id', (req, res) => {
     const id = req.params.id;
     db.get("SELECT * FROM items WHERE id = ?", [id], (err, row) => {
         if (err) return console.error(err.message);
+        if (!row) return res.send("Item not found. <a href='/'>Go Back</a>");
         res.render('item', { item: row, message: null });
     });
 });
 
 // Handle the Bid
-// Handle the Bid
 app.post('/bid/:id', (req, res) => {
     const id = req.params.id;
     const newBid = parseFloat(req.body.amount);
-    const email = req.body.email; // The NEW bidder's email
+    const email = req.body.email;
     const name = req.body.name;
 
     db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
-        if (err) return console.error(err.message); // Safety check
+        if (err) return console.error(err);
 
         if (newBid > item.current_bid) {
             
-            // A. NOTIFY PREVIOUS BIDDER (Only if it's a DIFFERENT person)
-            // Added check: item.bidder_email !== email
+            // A. NOTIFY PREVIOUS BIDDER (Smart Check)
+            // Only send email if there WAS a previous bidder AND it's a different person
             if (item.bidder_email && item.bidder_email !== email) {
+                console.log(`Sending Out-bid email to ${item.bidder_email}...`);
+                
                 const mailOptions = {
                     from: 'servicestation@austincollege.edu',
                     to: item.bidder_email,
@@ -90,7 +105,7 @@ app.post('/bid/:id', (req, res) => {
                 
                 transporter.sendMail(mailOptions, (error, info) => {
                     if (error) console.log('Error sending email:', error);
-                    else console.log('Outbid notification sent: ' + info.response);
+                    else console.log('Email sent: ' + info.response);
                 });
             }
 
@@ -104,7 +119,7 @@ app.post('/bid/:id', (req, res) => {
             );
 
         } else {
-            res.render('item', { item: item, message: "Bid must be higher than current amount." });
+            res.render('item', { item: item, message: `Bid must be higher than current amount ($${item.current_bid}).` });
         }
     });
 });

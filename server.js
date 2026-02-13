@@ -45,17 +45,12 @@ db.serialize(() => {
     });
 });
 
-// 2. Email Configuration (Corrected for Austin College / Office 365)
+// 2. Email Configuration (GMAIL BOT)
 const transporter = nodemailer.createTransport({
-    host: "smtp.office365.com", 
-    port: 587,
-    secure: false, // STARTTLS
+    service: 'gmail',
     auth: {
-        user: 'servicestation@austincollege.edu', // Typo fixed
-        pass: 'Service26!' 
-    },
-    tls: {
-        ciphers: 'SSLv3'
+        user: 'rooservicestation@gmail.com', 
+        pass: 'bqqx oobx yzjy mpvd' // <--- REPLACE THIS!!!
     }
 });
 
@@ -97,7 +92,7 @@ app.post('/bid/:id', (req, res) => {
                 console.log(`Sending Out-bid email to ${item.bidder_email}...`);
                 
                 const mailOptions = {
-                    from: 'servicestation@austincollege.edu',
+                    from: 'rooservicestation@gmail.com', // Sender Address
                     to: item.bidder_email,
                     subject: `You've been outbid on ${item.name}!`,
                     text: `Hello ${item.bidder_name},\n\nSomeone just bid $${newBid} on "${item.name}".\n\nGo to the auction site to reclaim your spot!`

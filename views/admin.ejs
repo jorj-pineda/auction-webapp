@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auction Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-gray-800 p-4 text-white flex justify-between">
+        <h1 class="font-bold text-xl">Admin Dashboard</h1>
+        <a href="/" target="_blank" class="text-gray-300 hover:text-white">View Public Site &rarr;</a>
+    </nav>
+
+    <div class="container mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        <div class="bg-white p-6 rounded shadow">
+            <h2 class="text-xl font-bold mb-4 border-b pb-2">Add New Art Piece</h2>
+            <form action="/admin/add" method="POST" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 font-bold">Item Name</label>
+                    <input type="text" name="name" required class="w-full p-2 border rounded">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold">Description</label>
+                    <textarea name="description" rows="3" required class="w-full p-2 border rounded"></textarea>
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold">Starting Price ($)</label>
+                    <input type="number" name="startPrice" value="50" required class="w-full p-2 border rounded">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold">Upload Image</label>
+                    <input type="file" name="image" required class="w-full p-2 border rounded bg-gray-50">
+                </div>
+                <button type="submit" class="w-full bg-green-600 text-white p-3 rounded hover:bg-green-700 font-bold">Add Item</button>
+            </form>
+        </div>
+
+        <div class="bg-white p-6 rounded shadow">
+            <h2 class="text-xl font-bold mb-4 border-b pb-2">Current Inventory & Links</h2>
+            <div class="space-y-4 max-h-[600px] overflow-y-auto">
+                <% items.forEach(function(item) { %>
+                    <div class="border p-4 rounded flex gap-4 items-start">
+                        <img src="<%= item.image_url %>" class="w-20 h-20 object-cover rounded">
+                        <div class="flex-1">
+                            <h3 class="font-bold text-lg"><%= item.name %></h3>
+                            <p class="text-sm text-gray-600">Current Bid: <strong>$<%= item.current_bid %></strong></p>
+                            
+                            <div class="mt-2 bg-gray-100 p-2 rounded text-xs break-all">
+                                <span class="font-bold text-gray-500">QR LINK:</span><br>
+                                <a href="<%= baseUrl %>/item/<%= item.id %>" target="_blank" class="text-blue-600 hover:underline">
+                                    <%= baseUrl %>/item/<%= item.id %>
+                                </a>
+                            </div>
+                        </div>
+                        <form action="/admin/delete/<%= item.id %>" method="POST" onsubmit="return confirm('Delete this item?');">
+                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold px-2">X</button>
+                        </form>
+                    </div>
+                <% }); %>
+                
+                <% if (items.length === 0) { %>
+                    <p class="text-gray-500 text-center italic">No items yet. Add one on the left!</p>
+                <% } %>
+            </div>
+        </div>
+
+    </div>
+</body>
+</html>

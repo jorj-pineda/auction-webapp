@@ -5,63 +5,85 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Auction Admin</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        .font-display { font-family: 'Fredoka One', cursive; }
+        .font-body { font-family: 'Nunito', sans-serif; }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
-    <nav class="bg-gray-800 p-4 text-white flex justify-between">
-        <h1 class="font-bold text-xl">Admin Dashboard</h1>
-        <a href="/" target="_blank" class="text-gray-300 hover:text-white">View Public Site &rarr;</a>
+<body class="bg-gray-100 min-h-screen font-body text-gray-800">
+    <nav class="bg-gray-800 p-4 text-white flex justify-between items-center shadow-md">
+        <h1 class="font-display text-xl uppercase tracking-widest">Admin Dashboard</h1>
+        <a href="/" target="_blank" class="text-gray-300 hover:text-white font-bold text-sm">VIEW PUBLIC SITE &rarr;</a>
     </nav>
 
     <div class="container mx-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
         
-        <div class="bg-white p-6 rounded shadow">
-            <h2 class="text-xl font-bold mb-4 border-b pb-2">Add New Art Piece</h2>
-            <form action="/admin/add" method="POST" enctype="multipart/form-data" class="space-y-4">
-                <div>
-                    <label class="block text-gray-700 font-bold">Item Name</label>
-                    <input type="text" name="name" required class="w-full p-2 border rounded">
-                </div>
-                <div>
-                    <label class="block text-gray-700 font-bold">Description</label>
-                    <textarea name="description" rows="3" required class="w-full p-2 border rounded"></textarea>
-                </div>
-                <div>
-                    <label class="block text-gray-700 font-bold">Starting Price ($)</label>
-                    <input type="number" name="startPrice" value="50" required class="w-full p-2 border rounded">
-                </div>
-                <div>
-                    <label class="block text-gray-700 font-bold">Upload Image</label>
-                    <input type="file" name="image" required class="w-full p-2 border rounded bg-gray-50">
-                </div>
-                <button type="submit" class="w-full bg-green-600 text-white p-3 rounded hover:bg-green-700 font-bold">Add Item</button>
+        <div class="col-span-full mb-4 p-6 rounded-xl shadow-lg border-4 <%= isPaused ? 'bg-red-50 border-red-600' : 'bg-green-50 border-green-600' %> flex flex-col md:flex-row justify-between items-center gap-4">
+            <div>
+                <h2 class="font-display text-2xl uppercase">
+                    Auction Status: 
+                    <span class="<%= isPaused ? 'text-red-600' : 'text-green-600' %>">
+                        <%= isPaused ? 'PAUSED' : 'LIVE' %>
+                    </span>
+                </h2>
+                <p class="text-gray-600">Stop all bidding instantly during announcements or speeches.</p>
+            </div>
+            <form action="/admin/<%= isPaused ? 'resume' : 'pause' %>" method="POST">
+                <button type="submit" class="px-8 py-4 rounded-xl font-bold text-white text-xl shadow-md transition transform active:scale-95 <%= isPaused ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700' %>">
+                    <%= isPaused ? '▶ RESUME BIDDING' : '⏸ PAUSE ALL BIDDING' %>
+                </button>
             </form>
         </div>
 
-        <div class="bg-white p-6 rounded shadow">
-            <h2 class="text-xl font-bold mb-4 border-b pb-2">Current Inventory & Links</h2>
-            <div class="space-y-4 max-h-[600px] overflow-y-auto">
+        <div class="bg-white p-6 rounded-xl shadow-md border-t-8 border-gray-800">
+            <h2 class="text-xl font-display mb-4 border-b pb-2 uppercase">Add New Art Piece</h2>
+            <form action="/admin/add" method="POST" enctype="multipart/form-data" class="space-y-4">
+                <div>
+                    <label class="block text-gray-700 font-bold text-sm uppercase">Item Name</label>
+                    <input type="text" name="name" required class="w-full p-2 border rounded-lg focus:border-black outline-none">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold text-sm uppercase">Description</label>
+                    <textarea name="description" rows="3" required class="w-full p-2 border rounded-lg focus:border-black outline-none"></textarea>
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold text-sm uppercase">Starting Price ($)</label>
+                    <input type="number" name="startPrice" value="50" required class="w-full p-2 border rounded-lg focus:border-black outline-none">
+                </div>
+                <div>
+                    <label class="block text-gray-700 font-bold text-sm uppercase">Upload Image</label>
+                    <input type="file" name="image" required class="w-full p-2 border rounded-lg bg-gray-50">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 font-bold shadow-md transition">UPLOAD PIECE</button>
+            </form>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-md border-t-8 border-yellow-400">
+            <h2 class="text-xl font-display mb-4 border-b pb-2 uppercase">Current Inventory & Links</h2>
+            <div class="space-y-4 max-h-[600px] overflow-y-auto pr-2">
                 <% items.forEach(function(item) { %>
-                    <div class="border p-4 rounded flex gap-4 items-start">
-                        <img src="<%= item.image_url %>" class="w-20 h-20 object-cover rounded">
+                    <div class="border p-4 rounded-lg flex gap-4 items-start bg-gray-50">
+                        <img src="<%= item.image_url %>" class="w-20 h-20 object-cover rounded shadow">
                         <div class="flex-1">
-                            <h3 class="font-bold text-lg"><%= item.name %></h3>
-                            <p class="text-sm text-gray-600">Current Bid: <strong>$<%= item.current_bid %></strong></p>
+                            <h3 class="font-bold text-lg text-gray-900"><%= item.name %></h3>
+                            <p class="text-sm text-gray-600">Current Bid: <strong class="text-green-600">$<%= item.current_bid %></strong></p>
                             
-                            <div class="mt-2 bg-gray-100 p-2 rounded text-xs break-all">
-                                <span class="font-bold text-gray-500">QR LINK:</span><br>
+                            <div class="mt-2 bg-white border p-2 rounded text-xs break-all">
+                                <span class="font-bold text-gray-400 uppercase">QR URL:</span><br>
                                 <a href="<%= baseUrl %>/item/<%= item.id %>" target="_blank" class="text-blue-600 hover:underline">
                                     <%= baseUrl %>/item/<%= item.id %>
                                 </a>
                             </div>
                         </div>
-                        <form action="/admin/delete/<%= item.id %>" method="POST" onsubmit="return confirm('Delete this item?');">
-                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold px-2">X</button>
+                        <form action="/admin/delete/<%= item.id %>" method="POST" onsubmit="return confirm('Delete this item permanently?');">
+                            <button type="submit" class="text-red-400 hover:text-red-600 font-bold px-2">✕</button>
                         </form>
                     </div>
                 <% }); %>
                 
                 <% if (items.length === 0) { %>
-                    <p class="text-gray-500 text-center italic">No items yet. Add one on the left!</p>
+                    <p class="text-gray-400 text-center py-10 italic">No items uploaded yet.</p>
                 <% } %>
             </div>
         </div>

@@ -151,16 +151,18 @@ app.post('/admin/login', (req, res) => {
 app.get('/admin', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
 
-    db.all("SELECT * FROM items", [], (err, rows) => {
-        // We pass the BASE_URL so the view can generate QR links
-        res.render('admin', { items: rows, baseUrl: BASE_URL });
-    });
-    db.get("SELECT is_paused FROM settings", (err, setting) => {
-        db.all("SELECT * FROM items", [], (err, rows) => {
-            res.render('admin', { 
-                items: rows, 
-                baseUrl: BASE_URL, 
-                isPaused: setting ? setting.is_paused : 0 
+    // Dashboard (Protected)
+    app.get('/admin', (req, res) => {
+        if (!req.session.loggedIn) return res.redirect('/admin/login');
+
+        // Fetch both items AND the pause setting
+        db.get("SELECT is_paused FROM settings", (err, setting) => {
+            db.all("SELECT * FROM items", [], (err, rows) => {
+                res.render('admin', { 
+                    items: rows, 
+                    baseUrl: BASE_URL, 
+                    isPaused: setting ? setting.is_paused : 0 
+                });
             });
         });
     });

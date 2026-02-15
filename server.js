@@ -53,18 +53,19 @@ db.serialize(() => {
         bidder_name TEXT
     )`);
 
-    // Safely upgrade existing database to include start_price
+    // Safely upgrade existing database
     db.run(`ALTER TABLE items ADD COLUMN start_price REAL DEFAULT 0`, (err) => {
-        if (!err) {
-            // Backfill start prices for any items you made previously
-            db.run(`UPDATE items SET start_price = current_bid WHERE start_price = 0`);
-        }
+        if (!err) db.run(`UPDATE items SET start_price = current_bid WHERE start_price = 0`);
     });
 
-    db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0)`);
+    db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0, timer_ends_at INTEGER DEFAULT 0)`);
+    
+    // Safely add timer column if it doesn't exist
+    db.run(`ALTER TABLE settings ADD COLUMN timer_ends_at INTEGER DEFAULT 0`, (err) => {});
+
     db.get("SELECT count(*) as count FROM settings", (err, row) => {
         if (!err && row && row.count === 0) {
-            db.run("INSERT INTO settings (is_paused) VALUES (0)");
+            db.run("INSERT INTO settings (is_paused, timer_ends_at) VALUES (0, 0)");
         }
     });
 });
@@ -81,27 +82,34 @@ const transporter = nodemailer.createTransport({
 // 5. Routes
 
 app.get('/', (req, res) => {
-    db.all("SELECT * FROM items", [], (err, rows) => {
-        res.render('index', { items: rows || [] });
+    db.get("SELECT timer_ends_at FROM settings", (err, setting) => {
+        db.all("SELECT * FROM items", [], (err, rows) => {
+            res.render('index', { 
+                items: rows || [], 
+                timerEndsAt: setting ? setting.timer_ends_at : 0 
+            });
+        });
     });
 });
 
 app.get('/item/:id', (req, res) => {
     const id = req.params.id;
-    db.get("SELECT is_paused FROM settings", (err, setting) => {
+    db.get("SELECT is_paused, timer_ends_at FROM settings", (err, setting) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, row) => {
             if (!row) return res.send("Item not found.");
-            res.render('item', { item: row, message: null, isPaused: setting ? setting.is_paused : 0 });
+            res.render('item', { 
+                item: row, 
+                message: null, 
+                isPaused: setting ? setting.is_paused : 0,
+                timerEndsAt: setting ? setting.timer_ends_at : 0
+            });
         });
     });
 });
 
 app.post('/bid/:id', (req, res) => {
-    db.get("SELECT is_paused FROM settings", (err, setting) => {
-        // Render the new paused page if paused!
-        if (setting && setting.is_paused) {
-            return res.render('paused');
-        }
+    db.get("SELECT is_paused, timer_ends_at FROM settings", (err, setting) => {
+        if (setting && setting.is_paused) return res.render('paused');
     
         const id = req.params.id;
         const newBid = parseFloat(req.body.amount);
@@ -111,19 +119,15 @@ app.post('/bid/:id', (req, res) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
             if (!item) return res.send("Item not found.");
 
-            // --- SMART INCREMENT LOGIC ---
             let minInc = 0.25;
             let maxInc = Infinity;
 
             if (item.start_price <= 0.25) {
-                minInc = 0.25;
-                maxInc = 1.00;
+                minInc = 0.25; maxInc = 1.00;
             } else if (item.start_price <= 1.00) {
-                minInc = 0.50;
-                maxInc = 5.00;
+                minInc = 0.50; maxInc = 5.00;
             } else {
-                minInc = 1.00;
-                maxInc = Infinity;
+                minInc = 1.00; maxInc = Infinity;
             }
 
             const isFirstBid = !item.bidder_name;
@@ -131,10 +135,10 @@ app.post('/bid/:id', (req, res) => {
             const maxValidBid = isFirstBid ? item.start_price + maxInc : item.current_bid + maxInc;
 
             if (newBid < minValidBid) {
-                return res.render('item', { item: item, message: `Bid must be at least $${minValidBid.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0 });
+                return res.render('item', { item: item, message: `Bid must be at least $${minValidBid.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
             if (maxInc !== Infinity && newBid > maxValidBid) {
-                return res.render('item', { item: item, message: `To keep things fair, the maximum bid increase is $${maxInc.toFixed(2)}. Please bid $${maxValidBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0 });
+                return res.render('item', { item: item, message: `To keep things fair, the maximum bid increase is $${maxInc.toFixed(2)}. Please bid $${maxValidBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
 
             const itemLink = `${BASE_URL}/item/${id}`;
@@ -162,7 +166,8 @@ app.post('/bid/:id', (req, res) => {
                     res.render('item', { 
                         item: { ...item, current_bid: newBid, bidder_name: name }, 
                         message: "Bid placed successfully!",
-                        isPaused: setting ? setting.is_paused : 0
+                        isPaused: setting ? setting.is_paused : 0,
+                        timerEndsAt: setting ? setting.timer_ends_at : 0
                     });
                 }
             );
@@ -185,11 +190,25 @@ app.post('/admin/login', (req, res) => {
 
 app.get('/admin', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
-    db.get("SELECT is_paused FROM settings", (err, setting) => {
+    db.get("SELECT is_paused, timer_ends_at FROM settings", (err, setting) => {
         db.all("SELECT * FROM items", [], (err, rows) => {
-            res.render('admin', { items: rows || [], baseUrl: BASE_URL, isPaused: setting ? setting.is_paused : 0 });
+            res.render('admin', { 
+                items: rows || [], 
+                baseUrl: BASE_URL, 
+                isPaused: setting ? setting.is_paused : 0,
+                timerEndsAt: setting ? setting.timer_ends_at : 0 
+            });
         });
     });
+});
+
+// Timer Set Route
+app.post('/admin/timer', (req, res) => {
+    if (!req.session.loggedIn) return res.redirect('/admin/login');
+    const minutes = parseFloat(req.body.minutes) || 0;
+    const endsAt = minutes > 0 ? Date.now() + (minutes * 60000) : 0;
+    
+    db.run("UPDATE settings SET timer_ends_at = ?", [endsAt], () => res.redirect('/admin'));
 });
 
 app.post('/admin/add', upload.single('image'), (req, res) => {
@@ -197,10 +216,9 @@ app.post('/admin/add', upload.single('image'), (req, res) => {
 
     const name = req.body.name;
     const description = req.body.description;
-    const startPrice = parseFloat(req.body.startPrice) || 0; // Grab start price safely
+    const startPrice = parseFloat(req.body.startPrice) || 0; 
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : 'https://placehold.co/600x400';
 
-    // Save the startPrice in BOTH the start_price and current_bid columns
     db.run("INSERT INTO items (name, description, image_url, start_price, current_bid) VALUES (?, ?, ?, ?, ?)",
         [name, description, imageUrl, startPrice, startPrice],
         (err) => res.redirect('/admin')

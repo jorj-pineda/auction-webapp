@@ -32,6 +32,11 @@
     </header>
 
     <div class="container mx-auto px-4 py-16 flex-grow">
+        <div id="auction-timer" class="text-center mb-8 hidden" aria-live="polite">
+            <p class="text-sm text-gray-500 font-bold uppercase tracking-wider">Auction Countdown</p>
+            <p id="timer-value" class="text-3xl font-display text-red-600">--:--</p>
+        </div>
+
         <h2 class="text-3xl font-bold mb-10 text-center text-gray-800 font-display tracking-wider uppercase">Available Art Pieces</h2>
         
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -68,5 +73,43 @@
     <footer class="bg-black text-white text-center py-4 font-display text-sm uppercase tracking-widest mt-auto">
         <p>Austin College Service Station</p>
     </footer>
+
+    <script>
+        (function () {
+            const timerRoot = document.getElementById('auction-timer');
+            const timerValue = document.getElementById('timer-value');
+            const rawTimerEndsAt = Number('<%= timerEndsAt || 0 %>');
+
+            if (!rawTimerEndsAt || Number.isNaN(rawTimerEndsAt)) return;
+
+            // Support either seconds or milliseconds in storage.
+            const timerEndsAtMs = rawTimerEndsAt < 1e12 ? rawTimerEndsAt * 1000 : rawTimerEndsAt;
+
+            const formatTime = (remainingMs) => {
+                const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            };
+
+            let intervalId;
+
+            const render = () => {
+                const remainingMs = timerEndsAtMs - Date.now();
+
+                if (remainingMs <= 0) {
+                    timerValue.textContent = '00:00';
+                    clearInterval(intervalId);
+                    return;
+                }
+
+                timerValue.textContent = formatTime(remainingMs);
+            };
+
+            timerRoot.classList.remove('hidden');
+            render();
+            intervalId = setInterval(render, 1000);
+        })();
+    </script>
 </body>
 </html>

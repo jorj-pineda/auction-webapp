@@ -79,25 +79,39 @@ app.get('/item/:id', (req, res) => {
     db.get("SELECT is_paused FROM settings", (err, setting) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, row) => {
             if (!row) return res.send("Item not found.");
-            res.render('item', { item: row, message: null, isPaused: setting.is_paused });
+            res.render('item', { item: row, message: null, isPaused: setting ? setting.is_paused : 0 });
         });
     });
 });
 
 app.post('/bid/:id', (req, res) => {
     db.get("SELECT is_paused FROM settings", (err, setting) => {
-        if (setting.is_paused) {
+        if (setting && setting.is_paused) {
             return res.send("Bidding is currently paused by the administrator.");
         }
     
-    const id = req.params.id;
-    const newBid = parseFloat(req.body.amount);
-    const email = req.body.email;
-    const name = req.body.name;
+        const id = req.params.id;
+        const newBid = parseFloat(req.body.amount);
+        const email = req.body.email;
+        const name = req.body.name;
 
-    
-    db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
-        if (newBid > item.current_bid) {
+        db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
+            if (!item) return res.send("Item not found.");
+
+            // 1. Calculate limits securely on the backend
+            const isFirstBid = !item.bidder_name;
+            const minBid = isFirstBid ? item.current_bid : item.current_bid + 0.25;
+            const maxBid = item.current_bid + 5.00;
+
+            // 2. Reject trolls and invalid bids
+            if (newBid < minBid) {
+                return res.render('item', { item: item, message: `Bid must be at least $${minBid.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0 });
+            }
+            if (newBid > maxBid) {
+                return res.render('item', { item: item, message: `Whoa! To keep things fair, the maximum bid increase is $5.00. Please bid $${maxBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0 });
+            }
+
+            // 3. Process the valid bid
             const itemLink = `${BASE_URL}/item/${id}`;
             const subjectLine = `Auction Status: ${item.name}`;
 
@@ -106,7 +120,7 @@ app.post('/bid/:id', (req, res) => {
                 from: 'rooservicestation@gmail.com',
                 to: email,
                 subject: subjectLine,
-                html: `<h3>Bid Confirmed!</h3><p>You bid <strong>$${newBid}</strong> on "${item.name}".</p><a href="${itemLink}">View Item</a>`
+                html: `<h3>Bid Confirmed!</h3><p>You bid <strong>$${newBid.toFixed(2)}</strong> on "${item.name}".</p><a href="${itemLink}">View Item</a>`
             });
 
             // Notify Loser
@@ -115,18 +129,22 @@ app.post('/bid/:id', (req, res) => {
                     from: 'rooservicestation@gmail.com',
                     to: item.bidder_email,
                     subject: subjectLine,
-                    html: `<h3 style="color:red;">Outbid!</h3><p>Someone bid <strong>$${newBid}</strong> on "${item.name}".</p><a href="${itemLink}">Bid Again</a>`
+                    html: `<h3 style="color:red;">Outbid!</h3><p>Someone bid <strong>$${newBid.toFixed(2)}</strong> on "${item.name}".</p><a href="${itemLink}">Bid Again</a>`
                 });
             }
 
+            // Save to database
             db.run(`UPDATE items SET current_bid = ?, bidder_email = ?, bidder_name = ? WHERE id = ?`, 
                 [newBid, email, name, id], 
-                (err) => res.render('item', { item: { ...item, current_bid: newBid, bidder_name: name }, message: "Bid placed successfully!" })
+                (err) => {
+                    res.render('item', { 
+                        item: { ...item, current_bid: newBid, bidder_name: name }, 
+                        message: "Bid placed successfully!",
+                        isPaused: setting ? setting.is_paused : 0
+                    });
+                }
             );
-        } else {
-            res.render('item', { item: item, message: `Bid must be higher than current amount ($${item.current_bid}).` });
-        }
-    });
+        });
     });
 });
 
@@ -151,18 +169,13 @@ app.post('/admin/login', (req, res) => {
 app.get('/admin', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
 
-    // Dashboard (Protected)
-    app.get('/admin', (req, res) => {
-        if (!req.session.loggedIn) return res.redirect('/admin/login');
-
-        // Fetch both items AND the pause setting
-        db.get("SELECT is_paused FROM settings", (err, setting) => {
-            db.all("SELECT * FROM items", [], (err, rows) => {
-                res.render('admin', { 
-                    items: rows, 
-                    baseUrl: BASE_URL, 
-                    isPaused: setting ? setting.is_paused : 0 
-                });
+    // Fetch both items AND the pause setting
+    db.get("SELECT is_paused FROM settings", (err, setting) => {
+        db.all("SELECT * FROM items", [], (err, rows) => {
+            res.render('admin', { 
+                items: rows, 
+                baseUrl: BASE_URL, 
+                isPaused: setting ? setting.is_paused : 0 
             });
         });
     });

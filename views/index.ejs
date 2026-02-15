@@ -31,15 +31,12 @@
         <div class="w-full h-8 bg-red-600 rounded-t-[50%] mt-4 -mb-1"></div>
     </header>
 
-    <div id="auction-timer" class="text-center py-8 hidden" aria-live="polite">
-        <p class="text-sm text-gray-500 font-bold uppercase tracking-wider">Auction Countdown</p>
-
-    </div>
-
     <div class="container mx-auto px-4 py-16 flex-grow">
-        
-        <div class="mb-16 bg-white rounded-xl shadow-lg border-8 border-black p-6 md:p-8 text-center max-w-3xl mx-auto transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl">
+
+        <!-- TIMER BOX (ONLY shows if a timer is active) -->
+        <div id="timer-card" class="mb-16 bg-white rounded-xl shadow-lg border-8 border-black p-6 md:p-8 text-center max-w-3xl mx-auto hidden" aria-live="polite">
             <h3 class="text-2xl md:text-3xl font-display text-gray-900 mb-6 tracking-wider uppercase">Auction Ends In</h3>
+
             <div id="countdown-timer" class="flex justify-center items-center space-x-4 md:space-x-8">
                 <div class="flex flex-col items-center w-16 md:w-24">
                     <span id="days" class="text-4xl md:text-6xl font-display text-red-600">00</span>
@@ -61,10 +58,12 @@
                     <span class="text-xs md:text-sm font-bold text-gray-500 uppercase tracking-widest mt-2">Secs</span>
                 </div>
             </div>
-        <div id="auction-timer" class="text-center mb-8 hidden" aria-live="polite">
-            <p class="text-sm text-gray-500 font-bold uppercase tracking-wider">Auction Countdown</p>
-            <p id="timer-value" class="text-3xl font-display text-red-600">--:--</p>
+
+            <div id="timer-ended" class="hidden mt-6">
+                <span class="text-3xl md:text-5xl font-display text-red-600 uppercase tracking-widest">Auction Ended!</span>
+            </div>
         </div>
+        <!-- END TIMER BOX -->
 
         <h2 class="text-3xl font-bold mb-10 text-center text-gray-800 font-display tracking-wider uppercase">Available Art Pieces</h2>
         
@@ -104,17 +103,42 @@
     </footer>
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // SET YOUR AUCTION END TIME HERE (Format: YYYY-MM-DDTHH:MM:SS)
-            const endTime = new Date("2026-03-01T20:00:00").getTime(); 
+        document.addEventListener('DOMContentLoaded', function () {
+            const rawTimerEndsAt = Number('<%= timerEndsAt || 0 %>');
 
-            const timerInterval = setInterval(function() {
-                const now = new Date().getTime();
-                const distance = endTime - now;
+            // 1) If there's no timer, do not show anything.
+            if (!rawTimerEndsAt || Number.isNaN(rawTimerEndsAt)) return;
 
-                if (distance < 0) {
-                    clearInterval(timerInterval);
-                    document.getElementById("countdown-timer").innerHTML = "<span class='text-3xl md:text-5xl font-display text-red-600 uppercase tracking-widest'>Auction Ended!</span>";
+            // timer_ends_at is stored in ms (Date.now()) in your server.js
+            const endTimeMs = rawTimerEndsAt;
+
+            // If timer is already expired, don't show the box (keeps your page clean)
+            if (endTimeMs <= Date.now()) return;
+
+            const timerCard = document.getElementById('timer-card');
+            const endedEl = document.getElementById('timer-ended');
+
+            const daysEl = document.getElementById('days');
+            const hoursEl = document.getElementById('hours');
+            const minutesEl = document.getElementById('minutes');
+            const secondsEl = document.getElementById('seconds');
+
+            timerCard.classList.remove('hidden');
+
+            let intervalId = null;
+
+            function render() {
+                const now = Date.now();
+                const distance = endTimeMs - now;
+
+                if (distance <= 0) {
+                    // Stop & show ended message (and keep only the timer box affected)
+                    clearInterval(intervalId);
+                    endedEl.classList.remove('hidden');
+                    daysEl.innerText = '00';
+                    hoursEl.innerText = '00';
+                    minutesEl.innerText = '00';
+                    secondsEl.innerText = '00';
                     return;
                 }
 
@@ -123,52 +147,15 @@
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-                document.getElementById("days").innerText = days.toString().padStart(2, '0');
-                document.getElementById("hours").innerText = hours.toString().padStart(2, '0');
-                document.getElementById("minutes").innerText = minutes.toString().padStart(2, '0');
-                document.getElementById("seconds").innerText = seconds.toString().padStart(2, '0');
-            }, 1000);
-        });
-        (function () {
-            const timerRoot = document.getElementById('auction-timer');
-            const timerValue = document.getElementById('timer-value');
-            const rawTimerEndsAt = Number('<%= timerEndsAt || 0 %>');
+                daysEl.innerText = String(days).padStart(2, '0');
+                hoursEl.innerText = String(hours).padStart(2, '0');
+                minutesEl.innerText = String(minutes).padStart(2, '0');
+                secondsEl.innerText = String(seconds).padStart(2, '0');
+            }
 
-            if (!rawTimerEndsAt || Number.isNaN(rawTimerEndsAt)) return;
-
-            // Support either seconds or milliseconds in storage.
-            const timerEndsAtMs = rawTimerEndsAt < 1e12 ? rawTimerEndsAt * 1000 : rawTimerEndsAt;
-
-            const formatTime = (remainingMs) => {
-                const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
-                const hours = Math.floor(totalSeconds / 3600);
-                const minutes = Math.floor((totalSeconds % 3600) / 60);
-                const seconds = totalSeconds % 60;
-                return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-                const minutes = Math.floor(totalSeconds / 60);
-                const seconds = totalSeconds % 60;
-                return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            };
-
-            let intervalId;
-
-            const render = () => {
-                const remainingMs = timerEndsAtMs - Date.now();
-
-                if (remainingMs <= 0) {
-                    timerValue.textContent = '00:00:00';
-                    timerValue.textContent = '00:00';
-                    clearInterval(intervalId);
-                    return;
-                }
-
-                timerValue.textContent = formatTime(remainingMs);
-            };
-
-            timerRoot.classList.remove('hidden');
             render();
             intervalId = setInterval(render, 1000);
-        })();
+        });
     </script>
 </body>
 </html>

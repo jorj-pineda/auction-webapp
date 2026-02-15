@@ -49,6 +49,11 @@ db.serialize(() => {
         bidder_email TEXT,
         bidder_name TEXT
     )`);
+    // Create settings table and default to NOT paused
+    db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0)`);
+    db.get("SELECT count(*) as count FROM settings", (err, row) => {
+        if (row.count === 0) db.run("INSERT INTO settings (is_paused) VALUES (0)");
+    });
 });
 
 // 4. Email Configuration
@@ -71,18 +76,26 @@ app.get('/', (req, res) => {
 
 app.get('/item/:id', (req, res) => {
     const id = req.params.id;
-    db.get("SELECT * FROM items WHERE id = ?", [id], (err, row) => {
-        if (!row) return res.send("Item not found.");
-        res.render('item', { item: row, message: null });
+    db.get("SELECT is_paused FROM settings", (err, setting) => {
+        db.get("SELECT * FROM items WHERE id = ?", [id], (err, row) => {
+            if (!row) return res.send("Item not found.");
+            res.render('item', { item: row, message: null, isPaused: setting.is_paused });
+        });
     });
 });
 
 app.post('/bid/:id', (req, res) => {
+    db.get("SELECT is_paused FROM settings", (err, setting) => {
+        if (setting.is_paused) {
+            return res.send("Bidding is currently paused by the administrator.");
+        }
+    
     const id = req.params.id;
     const newBid = parseFloat(req.body.amount);
     const email = req.body.email;
     const name = req.body.name;
 
+    
     db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
         if (newBid > item.current_bid) {
             const itemLink = `${BASE_URL}/item/${id}`;
@@ -114,6 +127,7 @@ app.post('/bid/:id', (req, res) => {
             res.render('item', { item: item, message: `Bid must be higher than current amount ($${item.current_bid}).` });
         }
     });
+    });
 });
 
 // --- ADMIN ROUTES ---
@@ -141,6 +155,15 @@ app.get('/admin', (req, res) => {
         // We pass the BASE_URL so the view can generate QR links
         res.render('admin', { items: rows, baseUrl: BASE_URL });
     });
+    db.get("SELECT is_paused FROM settings", (err, setting) => {
+        db.all("SELECT * FROM items", [], (err, rows) => {
+            res.render('admin', { 
+                items: rows, 
+                baseUrl: BASE_URL, 
+                isPaused: setting ? setting.is_paused : 0 
+            });
+        });
+    });
 });
 
 // Add Item Handler (With Image Upload)
@@ -159,6 +182,16 @@ app.post('/admin/add', upload.single('image'), (req, res) => {
         res.redirect('/admin');
     });
     stmt.finalize();
+});
+
+app.post('/admin/pause', (req, res) => {
+    if (!req.session.loggedIn) return res.redirect('/admin/login');
+    db.run("UPDATE settings SET is_paused = 1", () => res.redirect('/admin'));
+});
+
+app.post('/admin/resume', (req, res) => {
+    if (!req.session.loggedIn) return res.redirect('/admin/login');
+    db.run("UPDATE settings SET is_paused = 0", () => res.redirect('/admin'));
 });
 
 // Delete Item Handler

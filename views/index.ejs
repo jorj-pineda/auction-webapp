@@ -32,6 +32,7 @@
     </header>
 
     <div class="container mx-auto px-4 py-16 flex-grow">
+<<<<<<< HEAD
         
         <div class="mb-16 bg-white rounded-xl shadow-lg border-8 border-black p-6 md:p-8 text-center max-w-3xl mx-auto transform transition duration-300 hover:-translate-y-1 hover:shadow-2xl">
             <h3 class="text-2xl md:text-3xl font-display text-gray-900 mb-6 tracking-wider uppercase">Auction Ends In</h3>
@@ -56,6 +57,11 @@
                     <span class="text-xs md:text-sm font-bold text-gray-500 uppercase tracking-widest mt-2">Secs</span>
                 </div>
             </div>
+=======
+        <div id="auction-timer" class="text-center mb-8 hidden" aria-live="polite">
+            <p class="text-sm text-gray-500 font-bold uppercase tracking-wider">Auction Countdown</p>
+            <p id="timer-value" class="text-3xl font-display text-red-600">--:--</p>
+>>>>>>> 783e2f642d197a34fd6dec8bdcfa93b4b52ed013
         </div>
 
         <h2 class="text-3xl font-bold mb-10 text-center text-gray-800 font-display tracking-wider uppercase">Available Art Pieces</h2>
@@ -96,6 +102,7 @@
     </footer>
 
     <script>
+<<<<<<< HEAD
         document.addEventListener('DOMContentLoaded', function() {
             // SET YOUR AUCTION END TIME HERE (Format: YYYY-MM-DDTHH:MM:SS)
             const endTime = new Date("2026-03-01T20:00:00").getTime(); 
@@ -121,6 +128,43 @@
                 document.getElementById("seconds").innerText = seconds.toString().padStart(2, '0');
             }, 1000);
         });
+=======
+        (function () {
+            const timerRoot = document.getElementById('auction-timer');
+            const timerValue = document.getElementById('timer-value');
+            const rawTimerEndsAt = Number('<%= timerEndsAt || 0 %>');
+
+            if (!rawTimerEndsAt || Number.isNaN(rawTimerEndsAt)) return;
+
+            // Support either seconds or milliseconds in storage.
+            const timerEndsAtMs = rawTimerEndsAt < 1e12 ? rawTimerEndsAt * 1000 : rawTimerEndsAt;
+
+            const formatTime = (remainingMs) => {
+                const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = totalSeconds % 60;
+                return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+            };
+
+            let intervalId;
+
+            const render = () => {
+                const remainingMs = timerEndsAtMs - Date.now();
+
+                if (remainingMs <= 0) {
+                    timerValue.textContent = '00:00';
+                    clearInterval(intervalId);
+                    return;
+                }
+
+                timerValue.textContent = formatTime(remainingMs);
+            };
+
+            timerRoot.classList.remove('hidden');
+            render();
+            intervalId = setInterval(render, 1000);
+        })();
+>>>>>>> 783e2f642d197a34fd6dec8bdcfa93b4b52ed013
     </script>
 </body>
 </html>

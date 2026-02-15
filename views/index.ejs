@@ -39,11 +39,6 @@
 
             <div id="countdown-timer" class="flex justify-center items-center space-x-4 md:space-x-8">
                 <div class="flex flex-col items-center w-16 md:w-24">
-                    <span id="days" class="text-4xl md:text-6xl font-display text-red-600">00</span>
-                    <span class="text-xs md:text-sm font-bold text-gray-500 uppercase tracking-widest mt-2">Days</span>
-                </div>
-                <span class="text-3xl md:text-5xl font-display text-gray-300 pb-6">:</span>
-                <div class="flex flex-col items-center w-16 md:w-24">
                     <span id="hours" class="text-4xl md:text-6xl font-display text-yellow-400">00</span>
                     <span class="text-xs md:text-sm font-bold text-gray-500 uppercase tracking-widest mt-2">Hours</span>
                 </div>
@@ -106,19 +101,18 @@
         document.addEventListener('DOMContentLoaded', function () {
             const rawTimerEndsAt = Number('<%= timerEndsAt || 0 %>');
 
-            // 1) If there's no timer, do not show anything.
+            // If there's no timer, do not show anything.
             if (!rawTimerEndsAt || Number.isNaN(rawTimerEndsAt)) return;
 
             // timer_ends_at is stored in ms (Date.now()) in your server.js
             const endTimeMs = rawTimerEndsAt;
 
-            // If timer is already expired, don't show the box (keeps your page clean)
+            // If timer is already expired, don't show the box
             if (endTimeMs <= Date.now()) return;
 
             const timerCard = document.getElementById('timer-card');
             const endedEl = document.getElementById('timer-ended');
 
-            const daysEl = document.getElementById('days');
             const hoursEl = document.getElementById('hours');
             const minutesEl = document.getElementById('minutes');
             const secondsEl = document.getElementById('seconds');
@@ -132,23 +126,20 @@
                 const distance = endTimeMs - now;
 
                 if (distance <= 0) {
-                    // Stop & show ended message (and keep only the timer box affected)
                     clearInterval(intervalId);
                     endedEl.classList.remove('hidden');
-                    daysEl.innerText = '00';
                     hoursEl.innerText = '00';
                     minutesEl.innerText = '00';
                     secondsEl.innerText = '00';
                     return;
                 }
 
-                const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                // Roll any "days" into hours so it never needs a days tile
+                const totalHours = Math.floor(distance / (1000 * 60 * 60));
                 const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-                daysEl.innerText = String(days).padStart(2, '0');
-                hoursEl.innerText = String(hours).padStart(2, '0');
+                hoursEl.innerText = String(totalHours).padStart(2, '0');
                 minutesEl.innerText = String(minutes).padStart(2, '0');
                 secondsEl.innerText = String(seconds).padStart(2, '0');
             }

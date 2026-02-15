@@ -5,12 +5,13 @@ const nodemailer = require('nodemailer');
 const multer = require('multer');
 const session = require('express-session');
 const path = require('path');
+const fs = require('fs');
 const app = express();
 const PORT = 3000;
 
 // *** CONFIGURATION ***
-const BASE_URL = 'https://fiercest-irene-lousily.ngrok-free.dev'; // <--- PASTE NGROK URL HERE
-const ADMIN_PASSWORD = 'Service25!'; // <--- SET YOUR ADMIN PASSWORD HERE
+const BASE_URL = 'https://fiercest-irene-lousily.ngrok-free.dev'; 
+const ADMIN_PASSWORD = 'Service25!'; 
 
 // 1. Setup Middleware
 app.set('view engine', 'ejs');
@@ -22,20 +23,21 @@ app.use(session({
     saveUninitialized: true
 }));
 
-// 2. Image Upload Setup (Multer)
+const uploadDir = 'public/uploads/';
+if (!fs.existsSync(uploadDir)){
+    fs.mkdirSync(uploadDir, { recursive: true });
+}
+
+// 2. Image Upload Setup
 const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'public/uploads/') // Images save here
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + path.extname(file.originalname)) // Unique filename
-    }
+    destination: function (req, file, cb) { cb(null, uploadDir) },
+    filename: function (req, file, cb) { cb(null, Date.now() + path.extname(file.originalname)) }
 });
 const upload = multer({ storage: storage });
 
 // 3. Database Setup
 const db = new sqlite3.Database('./auction.db', (err) => {
-    if (err) console.error(err.message);
+    if (err) console.error("Database connection error:", err.message);
     console.log('Connected to the auction database.');
 });
 
@@ -45,14 +47,25 @@ db.serialize(() => {
         name TEXT,
         description TEXT,
         image_url TEXT,
+        start_price REAL DEFAULT 0,
         current_bid REAL DEFAULT 0,
         bidder_email TEXT,
         bidder_name TEXT
     )`);
-    // Create settings table and default to NOT paused
+
+    // Safely upgrade existing database to include start_price
+    db.run(`ALTER TABLE items ADD COLUMN start_price REAL DEFAULT 0`, (err) => {
+        if (!err) {
+            // Backfill start prices for any items you made previously
+            db.run(`UPDATE items SET start_price = current_bid WHERE start_price = 0`);
+        }
+    });
+
     db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0)`);
     db.get("SELECT count(*) as count FROM settings", (err, row) => {
-        if (row.count === 0) db.run("INSERT INTO settings (is_paused) VALUES (0)");
+        if (!err && row && row.count === 0) {
+            db.run("INSERT INTO settings (is_paused) VALUES (0)");
+        }
     });
 });
 
@@ -61,16 +74,15 @@ const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
         user: 'rooservicestation@gmail.com',
-        pass: 'bqqx oobx yzjy mpvd' // <--- YOUR APP PASSWORD
+        pass: 'bqqx oobx yzjy mpvd' 
     }
 });
 
 // 5. Routes
 
-// --- PUBLIC ROUTES ---
 app.get('/', (req, res) => {
     db.all("SELECT * FROM items", [], (err, rows) => {
-        res.render('index', { items: rows });
+        res.render('index', { items: rows || [] });
     });
 });
 
@@ -86,8 +98,9 @@ app.get('/item/:id', (req, res) => {
 
 app.post('/bid/:id', (req, res) => {
     db.get("SELECT is_paused FROM settings", (err, setting) => {
+        // Render the new paused page if paused!
         if (setting && setting.is_paused) {
-            return res.send("Bidding is currently paused by the administrator.");
+            return res.render('paused');
         }
     
         const id = req.params.id;
@@ -98,42 +111,51 @@ app.post('/bid/:id', (req, res) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
             if (!item) return res.send("Item not found.");
 
-            // 1. Calculate limits securely on the backend
+            // --- SMART INCREMENT LOGIC ---
+            let minInc = 0.25;
+            let maxInc = Infinity;
+
+            if (item.start_price <= 0.25) {
+                minInc = 0.25;
+                maxInc = 1.00;
+            } else if (item.start_price <= 1.00) {
+                minInc = 0.50;
+                maxInc = 5.00;
+            } else {
+                minInc = 1.00;
+                maxInc = Infinity;
+            }
+
             const isFirstBid = !item.bidder_name;
-            const minBid = isFirstBid ? item.current_bid : item.current_bid + 0.25;
-            const maxBid = item.current_bid + 5.00;
+            const minValidBid = isFirstBid ? item.start_price : item.current_bid + minInc;
+            const maxValidBid = isFirstBid ? item.start_price + maxInc : item.current_bid + maxInc;
 
-            // 2. Reject trolls and invalid bids
-            if (newBid < minBid) {
-                return res.render('item', { item: item, message: `Bid must be at least $${minBid.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0 });
+            if (newBid < minValidBid) {
+                return res.render('item', { item: item, message: `Bid must be at least $${minValidBid.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0 });
             }
-            if (newBid > maxBid) {
-                return res.render('item', { item: item, message: `Whoa! To keep things fair, the maximum bid increase is $5.00. Please bid $${maxBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0 });
+            if (maxInc !== Infinity && newBid > maxValidBid) {
+                return res.render('item', { item: item, message: `To keep things fair, the maximum bid increase is $${maxInc.toFixed(2)}. Please bid $${maxValidBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0 });
             }
 
-            // 3. Process the valid bid
             const itemLink = `${BASE_URL}/item/${id}`;
             const subjectLine = `Auction Status: ${item.name}`;
 
-            // Notify Winner
             transporter.sendMail({
                 from: 'rooservicestation@gmail.com',
                 to: email,
                 subject: subjectLine,
                 html: `<h3>Bid Confirmed!</h3><p>You bid <strong>$${newBid.toFixed(2)}</strong> on "${item.name}".</p><a href="${itemLink}">View Item</a>`
-            });
+            }).catch(e => console.error(e));
 
-            // Notify Loser
             if (item.bidder_email && item.bidder_email !== email) {
                 transporter.sendMail({
                     from: 'rooservicestation@gmail.com',
                     to: item.bidder_email,
                     subject: subjectLine,
                     html: `<h3 style="color:red;">Outbid!</h3><p>Someone bid <strong>$${newBid.toFixed(2)}</strong> on "${item.name}".</p><a href="${itemLink}">Bid Again</a>`
-                });
+                }).catch(e => console.error(e));
             }
 
-            // Save to database
             db.run(`UPDATE items SET current_bid = ?, bidder_email = ?, bidder_name = ? WHERE id = ?`, 
                 [newBid, email, name, id], 
                 (err) => {
@@ -150,12 +172,8 @@ app.post('/bid/:id', (req, res) => {
 
 // --- ADMIN ROUTES ---
 
-// Login Page
-app.get('/admin/login', (req, res) => {
-    res.render('login', { error: null });
-});
+app.get('/admin/login', (req, res) => res.render('login', { error: null }));
 
-// Login Handler
 app.post('/admin/login', (req, res) => {
     if (req.body.password === ADMIN_PASSWORD) {
         req.session.loggedIn = true;
@@ -165,38 +183,28 @@ app.post('/admin/login', (req, res) => {
     }
 });
 
-// Dashboard (Protected)
 app.get('/admin', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
-
-    // Fetch both items AND the pause setting
     db.get("SELECT is_paused FROM settings", (err, setting) => {
         db.all("SELECT * FROM items", [], (err, rows) => {
-            res.render('admin', { 
-                items: rows, 
-                baseUrl: BASE_URL, 
-                isPaused: setting ? setting.is_paused : 0 
-            });
+            res.render('admin', { items: rows || [], baseUrl: BASE_URL, isPaused: setting ? setting.is_paused : 0 });
         });
     });
 });
 
-// Add Item Handler (With Image Upload)
 app.post('/admin/add', upload.single('image'), (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
 
     const name = req.body.name;
     const description = req.body.description;
-    const startPrice = req.body.startPrice;
-    // If image uploaded, use it. If not, use placeholder.
+    const startPrice = parseFloat(req.body.startPrice) || 0; // Grab start price safely
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : 'https://placehold.co/600x400';
 
-    const stmt = db.prepare("INSERT INTO items (name, description, image_url, current_bid) VALUES (?, ?, ?, ?)");
-    stmt.run(name, description, imageUrl, startPrice, (err) => {
-        if (err) console.log(err);
-        res.redirect('/admin');
-    });
-    stmt.finalize();
+    // Save the startPrice in BOTH the start_price and current_bid columns
+    db.run("INSERT INTO items (name, description, image_url, start_price, current_bid) VALUES (?, ?, ?, ?, ?)",
+        [name, description, imageUrl, startPrice, startPrice],
+        (err) => res.redirect('/admin')
+    );
 });
 
 app.post('/admin/pause', (req, res) => {
@@ -209,12 +217,9 @@ app.post('/admin/resume', (req, res) => {
     db.run("UPDATE settings SET is_paused = 0", () => res.redirect('/admin'));
 });
 
-// Delete Item Handler
 app.post('/admin/delete/:id', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
     db.run("DELETE FROM items WHERE id = ?", req.params.id, () => res.redirect('/admin'));
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running at ${BASE_URL}`);
-});
+app.listen(PORT, () => console.log(`Server running at ${BASE_URL}`));

@@ -70,6 +70,16 @@
                     <label class="block text-gray-700 font-bold text-sm uppercase">Description</label>
                     <textarea name="description" rows="3" required class="w-full p-2 border rounded-lg focus:border-black outline-none bg-gray-50"></textarea>
                 </div>
+                
+                <div>
+                    <label class="block text-gray-700 font-bold text-sm uppercase mb-1">Bidding Rules (Tier)</label>
+                    <select name="bidType" required class="w-full p-2 border rounded-lg focus:border-black outline-none bg-gray-50 text-sm font-bold text-blue-700">
+                        <option value="1">Tier 1 (Min Inc: $0.25 | Max Inc: $1.00)</option>
+                        <option value="2">Tier 2 (Min Inc: $0.50 | Max Inc: $5.00)</option>
+                        <option value="3">Tier 3 (Min Inc: $1.00 | Max Inc: $10.00)</option>
+                    </select>
+                </div>
+
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-gray-700 font-bold text-sm uppercase">Start Price ($)</label>
@@ -84,7 +94,7 @@
                     <label class="block text-gray-700 font-bold text-sm uppercase">Upload Image</label>
                     <input type="file" name="image" required class="w-full p-2 border rounded-lg bg-gray-50">
                 </div>
-                <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 font-bold shadow-md transition uppercase tracking-widest">Upload Piece</button>
+                <button type="submit" class="w-full bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 font-bold shadow-md transition uppercase tracking-widest mt-2">Upload Piece</button>
             </form>
         </div>
 
@@ -97,7 +107,7 @@
                         <div class="flex-1">
                             <h3 class="font-bold text-lg text-gray-900"><%= item.name %></h3>
                             <p class="text-sm text-gray-600">Current Bid: <strong class="text-green-600">$<%= Number(item.current_bid).toFixed(2) %></strong></p>
-                            <p class="text-xs text-gray-400 mt-1 uppercase">Placement: <%= item.placement %></p>
+                            <p class="text-xs text-gray-400 mt-1 uppercase">Tier <%= item.bid_type %> | Place: <%= item.placement %></p>
                             
                             <div class="mt-2 bg-white border p-2 rounded text-xs break-all">
                                 <span class="font-bold text-gray-400 uppercase">QR URL:</span><br>

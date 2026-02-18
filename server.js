@@ -51,7 +51,8 @@ db.serialize(() => {
         current_bid REAL DEFAULT 0,
         bidder_email TEXT,
         bidder_name TEXT,
-        placement INTEGER DEFAULT 0
+        placement INTEGER DEFAULT 0,
+        bid_type INTEGER DEFAULT 1
     )`);
 
     // Safely upgrade existing database
@@ -59,6 +60,15 @@ db.serialize(() => {
         if (!err) db.run(`UPDATE items SET start_price = current_bid WHERE start_price = 0`);
     });
     db.run(`ALTER TABLE items ADD COLUMN placement INTEGER DEFAULT 0`, (err) => {});
+    
+    // Safely add the new Bid Type column & backfill old items
+    db.run(`ALTER TABLE items ADD COLUMN bid_type INTEGER DEFAULT 1`, (err) => {
+        if (!err) {
+            db.run(`UPDATE items SET bid_type = 1 WHERE start_price <= 0.25`);
+            db.run(`UPDATE items SET bid_type = 2 WHERE start_price > 0.25 AND start_price <= 1.00`);
+            db.run(`UPDATE items SET bid_type = 3 WHERE start_price > 1.00`);
+        }
+    });
 
     db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0, timer_ends_at INTEGER DEFAULT 0)`);
     db.run(`ALTER TABLE settings ADD COLUMN timer_ends_at INTEGER DEFAULT 0`, (err) => {});
@@ -83,12 +93,8 @@ const transporter = nodemailer.createTransport({
 
 app.get('/', (req, res) => {
     db.get("SELECT timer_ends_at FROM settings", (err, setting) => {
-        // Updated to sort by placement first, then by ID
         db.all("SELECT * FROM items ORDER BY placement ASC, id ASC", [], (err, rows) => {
-            res.render('index', { 
-                items: rows || [], 
-                timerEndsAt: setting ? setting.timer_ends_at : 0 
-            });
+            res.render('index', { items: rows || [], timerEndsAt: setting ? setting.timer_ends_at : 0 });
         });
     });
 });
@@ -98,12 +104,7 @@ app.get('/item/:id', (req, res) => {
     db.get("SELECT is_paused, timer_ends_at FROM settings", (err, setting) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, row) => {
             if (!row) return res.send("Item not found.");
-            res.render('item', { 
-                item: row, 
-                message: null, 
-                isPaused: setting ? setting.is_paused : 0,
-                timerEndsAt: setting ? setting.timer_ends_at : 0
-            });
+            res.render('item', { item: row, message: null, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
         });
     });
 });
@@ -120,15 +121,14 @@ app.post('/bid/:id', (req, res) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
             if (!item) return res.send("Item not found.");
 
-            let minInc = 0.25;
-            let maxInc = Infinity;
-
-            if (item.start_price <= 0.25) {
+            // --- STRICT 3-TIER LOGIC ---
+            let minInc, maxInc;
+            if (item.bid_type === 1) { // Tiny pieces
                 minInc = 0.25; maxInc = 1.00;
-            } else if (item.start_price <= 1.00) {
+            } else if (item.bid_type === 2) { // Medium pieces
                 minInc = 0.50; maxInc = 5.00;
-            } else {
-                minInc = 1.00; maxInc = Infinity;
+            } else { // Large pieces (Tier 3)
+                minInc = 1.00; maxInc = 10.00;
             }
 
             const isFirstBid = !item.bidder_name;
@@ -138,7 +138,7 @@ app.post('/bid/:id', (req, res) => {
             if (newBid < minValidBid) {
                 return res.render('item', { item: item, message: `Bid must be at least $${minValidBid.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
-            if (maxInc !== Infinity && newBid > maxValidBid) {
+            if (newBid > maxValidBid) {
                 return res.render('item', { item: item, message: `To keep things fair, the maximum bid increase is $${maxInc.toFixed(2)}. Please bid $${maxValidBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
 
@@ -193,12 +193,7 @@ app.get('/admin', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
     db.get("SELECT is_paused, timer_ends_at FROM settings", (err, setting) => {
         db.all("SELECT * FROM items ORDER BY placement ASC, id ASC", [], (err, rows) => {
-            res.render('admin', { 
-                items: rows || [], 
-                baseUrl: BASE_URL, 
-                isPaused: setting ? setting.is_paused : 0,
-                timerEndsAt: setting ? setting.timer_ends_at : 0 
-            });
+            res.render('admin', { items: rows || [], baseUrl: BASE_URL, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
         });
     });
 });
@@ -214,17 +209,17 @@ app.get('/admin/edit/:id', (req, res) => {
 
 app.post('/admin/edit/:id', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
-    const { name, description, startPrice, placement } = req.body;
+    const { name, description, startPrice, placement, bidType } = req.body;
     const parsedStart = parseFloat(startPrice) || 0;
+    const parsedBidType = parseInt(bidType) || 1;
     
     db.get("SELECT current_bid, bidder_email FROM items WHERE id = ?", [req.params.id], (err, item) => {
         if (!item) return res.redirect('/admin');
-        
         const newCurrentBid = item.bidder_email ? item.current_bid : parsedStart;
 
         db.run(
-            "UPDATE items SET name = ?, description = ?, start_price = ?, placement = ?, current_bid = ? WHERE id = ?",
-            [name, description, parsedStart, parseInt(placement) || 0, newCurrentBid, req.params.id],
+            "UPDATE items SET name = ?, description = ?, start_price = ?, placement = ?, bid_type = ?, current_bid = ? WHERE id = ?",
+            [name, description, parsedStart, parseInt(placement) || 0, parsedBidType, newCurrentBid, req.params.id],
             () => res.redirect('/admin')
         );
     });
@@ -234,7 +229,6 @@ app.post('/admin/timer', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
     const minutes = parseFloat(req.body.minutes) || 0;
     const endsAt = minutes > 0 ? Date.now() + (minutes * 60000) : 0;
-    
     db.run("UPDATE settings SET timer_ends_at = ?", [endsAt], () => res.redirect('/admin'));
 });
 
@@ -245,10 +239,11 @@ app.post('/admin/add', upload.single('image'), (req, res) => {
     const description = req.body.description;
     const startPrice = parseFloat(req.body.startPrice) || 0; 
     const placement = parseInt(req.body.placement) || 0;
+    const bidType = parseInt(req.body.bidType) || 1;
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : 'https://placehold.co/600x400';
 
-    db.run("INSERT INTO items (name, description, image_url, start_price, current_bid, placement) VALUES (?, ?, ?, ?, ?, ?)",
-        [name, description, imageUrl, startPrice, startPrice, placement],
+    db.run("INSERT INTO items (name, description, image_url, start_price, current_bid, placement, bid_type) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [name, description, imageUrl, startPrice, startPrice, placement, bidType],
         (err) => res.redirect('/admin')
     );
 });
@@ -263,20 +258,15 @@ app.post('/admin/resume', (req, res) => {
     db.run("UPDATE settings SET is_paused = 0", () => res.redirect('/admin'));
 });
 
-// END AUCTION ROUTE
 app.post('/admin/end', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
 
-    // 1. Instantly pause the auction and kill the timer
     db.run("UPDATE settings SET is_paused = 1, timer_ends_at = 0", () => {
-        
-        // 2. Grab all items that have a winner, grouped by bidder name
         db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BY bidder_name ASC", [], (err, rows) => {
             if (err || !rows || rows.length === 0) return res.redirect('/admin'); 
 
-            // 3. Build the CSV Spreadsheet String
             let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link\n";
-            const winners = {}; // Tally up totals per person
+            const winners = {};
 
             rows.forEach(row => {
                 const itemLink = `${BASE_URL}/item/${row.id}`;
@@ -292,7 +282,6 @@ app.post('/admin/end', (req, res) => {
                 winners[row.bidder_email].total += row.current_bid;
             });
 
-            // 4. Send Admin the master list
             transporter.sendMail({
                 from: 'rooservicestation@gmail.com',
                 to: 'rooservicestation@gmail.com', 
@@ -301,7 +290,6 @@ app.post('/admin/end', (req, res) => {
                 attachments: [{ filename: 'tostan_auction_winners.csv', content: csvContent }]
             }).catch(e => console.error(e));
 
-            // 5. Send checkout emails to all the winners
             for (const email in winners) {
                 const winner = winners[email];
                 let itemsListHtml = winner.items.map(item => `<li><strong>${item.name}</strong> - $${item.current_bid.toFixed(2)}</li>`).join('');

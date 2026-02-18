@@ -50,17 +50,17 @@ db.serialize(() => {
         start_price REAL DEFAULT 0,
         current_bid REAL DEFAULT 0,
         bidder_email TEXT,
-        bidder_name TEXT
+        bidder_name TEXT,
+        placement INTEGER DEFAULT 0
     )`);
 
     // Safely upgrade existing database
     db.run(`ALTER TABLE items ADD COLUMN start_price REAL DEFAULT 0`, (err) => {
         if (!err) db.run(`UPDATE items SET start_price = current_bid WHERE start_price = 0`);
     });
+    db.run(`ALTER TABLE items ADD COLUMN placement INTEGER DEFAULT 0`, (err) => {});
 
     db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0, timer_ends_at INTEGER DEFAULT 0)`);
-    
-    // Safely add timer column if it doesn't exist
     db.run(`ALTER TABLE settings ADD COLUMN timer_ends_at INTEGER DEFAULT 0`, (err) => {});
 
     db.get("SELECT count(*) as count FROM settings", (err, row) => {
@@ -83,7 +83,8 @@ const transporter = nodemailer.createTransport({
 
 app.get('/', (req, res) => {
     db.get("SELECT timer_ends_at FROM settings", (err, setting) => {
-        db.all("SELECT * FROM items", [], (err, rows) => {
+        // Updated to sort by placement first, then by ID
+        db.all("SELECT * FROM items ORDER BY placement ASC, id ASC", [], (err, rows) => {
             res.render('index', { 
                 items: rows || [], 
                 timerEndsAt: setting ? setting.timer_ends_at : 0 
@@ -191,7 +192,7 @@ app.post('/admin/login', (req, res) => {
 app.get('/admin', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
     db.get("SELECT is_paused, timer_ends_at FROM settings", (err, setting) => {
-        db.all("SELECT * FROM items", [], (err, rows) => {
+        db.all("SELECT * FROM items ORDER BY placement ASC, id ASC", [], (err, rows) => {
             res.render('admin', { 
                 items: rows || [], 
                 baseUrl: BASE_URL, 
@@ -202,7 +203,33 @@ app.get('/admin', (req, res) => {
     });
 });
 
-// Timer Set Route
+// EDIT ROUTES
+app.get('/admin/edit/:id', (req, res) => {
+    if (!req.session.loggedIn) return res.redirect('/admin/login');
+    db.get("SELECT * FROM items WHERE id = ?", [req.params.id], (err, row) => {
+        if (!row) return res.redirect('/admin');
+        res.render('edit', { item: row });
+    });
+});
+
+app.post('/admin/edit/:id', (req, res) => {
+    if (!req.session.loggedIn) return res.redirect('/admin/login');
+    const { name, description, startPrice, placement } = req.body;
+    const parsedStart = parseFloat(startPrice) || 0;
+    
+    db.get("SELECT current_bid, bidder_email FROM items WHERE id = ?", [req.params.id], (err, item) => {
+        if (!item) return res.redirect('/admin');
+        
+        const newCurrentBid = item.bidder_email ? item.current_bid : parsedStart;
+
+        db.run(
+            "UPDATE items SET name = ?, description = ?, start_price = ?, placement = ?, current_bid = ? WHERE id = ?",
+            [name, description, parsedStart, parseInt(placement) || 0, newCurrentBid, req.params.id],
+            () => res.redirect('/admin')
+        );
+    });
+});
+
 app.post('/admin/timer', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
     const minutes = parseFloat(req.body.minutes) || 0;
@@ -217,10 +244,11 @@ app.post('/admin/add', upload.single('image'), (req, res) => {
     const name = req.body.name;
     const description = req.body.description;
     const startPrice = parseFloat(req.body.startPrice) || 0; 
+    const placement = parseInt(req.body.placement) || 0;
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : 'https://placehold.co/600x400';
 
-    db.run("INSERT INTO items (name, description, image_url, start_price, current_bid) VALUES (?, ?, ?, ?, ?)",
-        [name, description, imageUrl, startPrice, startPrice],
+    db.run("INSERT INTO items (name, description, image_url, start_price, current_bid, placement) VALUES (?, ?, ?, ?, ?, ?)",
+        [name, description, imageUrl, startPrice, startPrice, placement],
         (err) => res.redirect('/admin')
     );
 });
@@ -233,6 +261,70 @@ app.post('/admin/pause', (req, res) => {
 app.post('/admin/resume', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
     db.run("UPDATE settings SET is_paused = 0", () => res.redirect('/admin'));
+});
+
+// END AUCTION ROUTE
+app.post('/admin/end', (req, res) => {
+    if (!req.session.loggedIn) return res.redirect('/admin/login');
+
+    // 1. Instantly pause the auction and kill the timer
+    db.run("UPDATE settings SET is_paused = 1, timer_ends_at = 0", () => {
+        
+        // 2. Grab all items that have a winner, grouped by bidder name
+        db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BY bidder_name ASC", [], (err, rows) => {
+            if (err || !rows || rows.length === 0) return res.redirect('/admin'); 
+
+            // 3. Build the CSV Spreadsheet String
+            let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link\n";
+            const winners = {}; // Tally up totals per person
+
+            rows.forEach(row => {
+                const itemLink = `${BASE_URL}/item/${row.id}`;
+                const safeName = (row.bidder_name || 'Anonymous').replace(/"/g, '""');
+                const safeItemName = (row.name || '').replace(/"/g, '""');
+                
+                csvContent += `"${safeName}","${row.bidder_email}","${safeItemName}","$${row.current_bid.toFixed(2)}","${itemLink}"\n`;
+
+                if (!winners[row.bidder_email]) {
+                    winners[row.bidder_email] = { name: row.bidder_name, items: [], total: 0 };
+                }
+                winners[row.bidder_email].items.push(row);
+                winners[row.bidder_email].total += row.current_bid;
+            });
+
+            // 4. Send Admin the master list
+            transporter.sendMail({
+                from: 'rooservicestation@gmail.com',
+                to: 'rooservicestation@gmail.com', 
+                subject: '🚨 AUCTION ENDED: Final Winners Report',
+                html: `<h3>The auction is closed.</h3><p>Attached is the final list of winners grouped by name.</p>`,
+                attachments: [{ filename: 'tostan_auction_winners.csv', content: csvContent }]
+            }).catch(e => console.error(e));
+
+            // 5. Send checkout emails to all the winners
+            for (const email in winners) {
+                const winner = winners[email];
+                let itemsListHtml = winner.items.map(item => `<li><strong>${item.name}</strong> - $${item.current_bid.toFixed(2)}</li>`).join('');
+                
+                transporter.sendMail({
+                    from: 'rooservicestation@gmail.com',
+                    to: email,
+                    subject: '🎉 You won at the Tostan Art Auction!',
+                    html: `
+                        <h2>Congratulations ${winner.name}!</h2>
+                        <p>Bidding has officially closed, and you are the winning bidder for the following item(s):</p>
+                        <ul>${itemsListHtml}</ul>
+                        <p><strong>Total Due: $${winner.total.toFixed(2)}</strong></p>
+                        <p>Please head over to the checkout table to pay for your art and claim your items!</p>
+                        <br>
+                        <p>Thank you for supporting Austin College Service Station!</p>
+                    `
+                }).catch(e => console.error(e));
+            }
+
+            res.redirect('/admin');
+        });
+    });
 });
 
 app.post('/admin/delete/:id', (req, res) => {

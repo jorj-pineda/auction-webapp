@@ -7,7 +7,7 @@ const session = require('express-session');
 const path = require('path');
 const fs = require('fs');
 const app = express();
-constZh PORT = 3000;
+const PORT = 3000;
 
 // *** CONFIGURATION ***
 const BASE_URL = 'https://fiercest-irene-lousily.ngrok-free.dev'; 
@@ -70,11 +70,10 @@ db.serialize(() => {
         }
     });
 
-    // --- NEW: Add columns for 2nd place tracker ---
+    // Add columns for 2nd place tracker
     db.run(`ALTER TABLE items ADD COLUMN second_bid REAL DEFAULT 0`, (err) => {});
     db.run(`ALTER TABLE items ADD COLUMN second_bidder_email TEXT`, (err) => {});
     db.run(`ALTER TABLE items ADD COLUMN second_bidder_name TEXT`, (err) => {});
-    // ----------------------------------------------
 
     db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0, timer_ends_at INTEGER DEFAULT 0)`);
     db.run(`ALTER TABLE settings ADD COLUMN timer_ends_at INTEGER DEFAULT 0`, (err) => {});
@@ -127,13 +126,12 @@ app.post('/bid/:id', (req, res) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
             if (!item) return res.send("Item not found.");
 
-            // --- STRICT 3-TIER LOGIC ---
             let minInc, maxInc;
-            if (item.bid_type === 1) { // Tiny pieces
+            if (item.bid_type === 1) { 
                 minInc = 0.25; maxInc = 1.00;
-            } else if (item.bid_type === 2) { // Medium pieces
+            } else if (item.bid_type === 2) { 
                 minInc = 0.50; maxInc = 5.00;
-            } else { // Large pieces (Tier 3)
+            } else { 
                 minInc = 1.00; maxInc = 10.00;
             }
 
@@ -145,7 +143,7 @@ app.post('/bid/:id', (req, res) => {
                 return res.render('item', { item: item, message: `Bid must be at least $${minValidBid.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
             if (newBid > maxValidBid) {
-                return res.render('item', { item: item, message: `To keep things fair, the maximum bid increase is $${maxInc.toFixed(2)}. Please bid $${maxValidBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
+                return res.render('item', { item: item, message: `Maximum bid increase is $${maxInc.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
 
             const itemLink = `${BASE_URL}/item/${id}`;
@@ -167,12 +165,11 @@ app.post('/bid/:id', (req, res) => {
                 }).catch(e => console.error(e));
             }
 
-            // --- 2nd Place Logic ---
+            // Determine 2nd place
             let nextSecondBid = item.second_bid || 0;
             let nextSecondEmail = item.second_bidder_email || '';
             let nextSecondName = item.second_bidder_name || '';
 
-            // Only move the current winner to 2nd place if the NEW bidder is a DIFFERENT person.
             if (item.bidder_email && item.bidder_email !== email) {
                 nextSecondBid = item.current_bid;
                 nextSecondEmail = item.bidder_email;
@@ -194,8 +191,6 @@ app.post('/bid/:id', (req, res) => {
     });
 });
 
-// --- ADMIN ROUTES ---
-
 app.get('/admin/login', (req, res) => res.render('login', { error: null }));
 
 app.post('/admin/login', (req, res) => {
@@ -216,7 +211,6 @@ app.get('/admin', (req, res) => {
     });
 });
 
-// EDIT ROUTES
 app.get('/admin/edit/:id', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
     db.get("SELECT * FROM items WHERE id = ?", [req.params.id], (err, row) => {
@@ -280,10 +274,9 @@ app.post('/admin/end', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
 
     db.run("UPDATE settings SET is_paused = 1, timer_ends_at = 0", () => {
-        db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BYZC bidder_name ASC", [], (err, rows) => {
+        db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BY bidder_name ASC", [], (err, rows) => {
             if (err || !rows || rows.length === 0) return res.redirect('/admin'); 
 
-            // --- Updated CSV Header to include Runner Up ---
             let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link,Runner Up Name,Runner Up Email,Runner Up Bid\n";
             const winners = {};
 
@@ -292,12 +285,10 @@ app.post('/admin/end', (req, res) => {
                 const safeName = (row.bidder_name || 'Anonymous').replace(/"/g, '""');
                 const safeItemName = (row.name || '').replace(/"/g, '""');
                 
-                // --- Prepare Runner Up Data for CSV ---
                 const safeSecondName = (row.second_bidder_name || '').replace(/"/g, '""');
                 const secondEmail = row.second_bidder_email || '';
                 const secondBid = row.second_bid > 0 ? `$${row.second_bid.toFixed(2)}` : '';
 
-                // --- Append Runner Up Columns ---
                 csvContent += `"${safeName}","${row.bidder_email}","${safeItemName}","$${row.current_bid.toFixed(2)}","${itemLink}","${safeSecondName}","${secondEmail}","${secondBid}"\n`;
 
                 if (!winners[row.bidder_email]) {

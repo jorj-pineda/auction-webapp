@@ -71,6 +71,7 @@
                                 let minInc = 0.25; let maxInc = 1.00;
                                 if (item.bid_type === 2) { minInc = 0.50; maxInc = 5.00; }
                                 else if (item.bid_type === 3) { minInc = 1.00; maxInc = 10.00; }
+                                else if (item.bid_type === 4) { minInc = 1.00; maxInc = 25.00; }
 
                                 const isFirstBid = !item.bidder_name;
                                 const minBid = isFirstBid ? item.start_price : item.current_bid + minInc;

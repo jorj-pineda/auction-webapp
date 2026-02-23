@@ -70,11 +70,6 @@ db.serialize(() => {
         }
     });
 
-    // Add columns for 2nd place tracker
-    db.run(`ALTER TABLE items ADD COLUMN second_bid REAL DEFAULT 0`, (err) => {});
-    db.run(`ALTER TABLE items ADD COLUMN second_bidder_email TEXT`, (err) => {});
-    db.run(`ALTER TABLE items ADD COLUMN second_bidder_name TEXT`, (err) => {});
-
     db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0, timer_ends_at INTEGER DEFAULT 0)`);
     db.run(`ALTER TABLE settings ADD COLUMN timer_ends_at INTEGER DEFAULT 0`, (err) => {});
 
@@ -126,12 +121,15 @@ app.post('/bid/:id', (req, res) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
             if (!item) return res.send("Item not found.");
 
+            // --- STRICT 4-TIER LOGIC ---
             let minInc, maxInc;
-            if (item.bid_type === 1) { 
+            if (item.bid_type === 1) {        // Tier 1: Tiny pieces
                 minInc = 0.25; maxInc = 1.00;
-            } else if (item.bid_type === 2) { 
+            } else if (item.bid_type === 2) { // Tier 2: Medium pieces
                 minInc = 0.50; maxInc = 5.00;
-            } else { 
+            } else if (item.bid_type === 4) { // Tier 4: Expensive/Premium Art (New!)
+                minInc = 1.00; maxInc = 25.00;
+            } else {                          // Tier 3: Large pieces (Default)
                 minInc = 1.00; maxInc = 10.00;
             }
 
@@ -143,7 +141,7 @@ app.post('/bid/:id', (req, res) => {
                 return res.render('item', { item: item, message: `Bid must be at least $${minValidBid.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
             if (newBid > maxValidBid) {
-                return res.render('item', { item: item, message: `Maximum bid increase is $${maxInc.toFixed(2)}.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
+                return res.render('item', { item: item, message: `To keep things fair, the maximum bid increase is $${maxInc.toFixed(2)}. Please bid $${maxValidBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
 
             const itemLink = `${BASE_URL}/item/${id}`;
@@ -165,19 +163,8 @@ app.post('/bid/:id', (req, res) => {
                 }).catch(e => console.error(e));
             }
 
-            // Determine 2nd place
-            let nextSecondBid = item.second_bid || 0;
-            let nextSecondEmail = item.second_bidder_email || '';
-            let nextSecondName = item.second_bidder_name || '';
-
-            if (item.bidder_email && item.bidder_email !== email) {
-                nextSecondBid = item.current_bid;
-                nextSecondEmail = item.bidder_email;
-                nextSecondName = item.bidder_name;
-            }
-
-            db.run(`UPDATE items SET current_bid = ?, bidder_email = ?, bidder_name = ?, second_bid = ?, second_bidder_email = ?, second_bidder_name = ? WHERE id = ?`, 
-                [newBid, email, name, nextSecondBid, nextSecondEmail, nextSecondName, id], 
+            db.run(`UPDATE items SET current_bid = ?, bidder_email = ?, bidder_name = ? WHERE id = ?`, 
+                [newBid, email, name, id], 
                 (err) => {
                     res.render('item', { 
                         item: { ...item, current_bid: newBid, bidder_name: name }, 
@@ -190,6 +177,8 @@ app.post('/bid/:id', (req, res) => {
         });
     });
 });
+
+// --- ADMIN ROUTES ---
 
 app.get('/admin/login', (req, res) => res.render('login', { error: null }));
 
@@ -211,6 +200,7 @@ app.get('/admin', (req, res) => {
     });
 });
 
+// EDIT ROUTES
 app.get('/admin/edit/:id', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
     db.get("SELECT * FROM items WHERE id = ?", [req.params.id], (err, row) => {
@@ -277,7 +267,7 @@ app.post('/admin/end', (req, res) => {
         db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BY bidder_name ASC", [], (err, rows) => {
             if (err || !rows || rows.length === 0) return res.redirect('/admin'); 
 
-            let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link,Runner Up Name,Runner Up Email,Runner Up Bid\n";
+            let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link\n";
             const winners = {};
 
             rows.forEach(row => {
@@ -285,11 +275,7 @@ app.post('/admin/end', (req, res) => {
                 const safeName = (row.bidder_name || 'Anonymous').replace(/"/g, '""');
                 const safeItemName = (row.name || '').replace(/"/g, '""');
                 
-                const safeSecondName = (row.second_bidder_name || '').replace(/"/g, '""');
-                const secondEmail = row.second_bidder_email || '';
-                const secondBid = row.second_bid > 0 ? `$${row.second_bid.toFixed(2)}` : '';
-
-                csvContent += `"${safeName}","${row.bidder_email}","${safeItemName}","$${row.current_bid.toFixed(2)}","${itemLink}","${safeSecondName}","${secondEmail}","${secondBid}"\n`;
+                csvContent += `"${safeName}","${row.bidder_email}","${safeItemName}","$${row.current_bid.toFixed(2)}","${itemLink}"\n`;
 
                 if (!winners[row.bidder_email]) {
                     winners[row.bidder_email] = { name: row.bidder_name, items: [], total: 0 };
@@ -302,7 +288,7 @@ app.post('/admin/end', (req, res) => {
                 from: 'rooservicestation@gmail.com',
                 to: 'rooservicestation@gmail.com', 
                 subject: '🚨 AUCTION ENDED: Final Winners Report',
-                html: `<h3>The auction is closed.</h3><p>Attached is the final list of winners grouped by name (including runner-up data).</p>`,
+                html: `<h3>The auction is closed.</h3><p>Attached is the final list of winners grouped by name.</p>`,
                 attachments: [{ filename: 'tostan_auction_winners.csv', content: csvContent }]
             }).catch(e => console.error(e));
 

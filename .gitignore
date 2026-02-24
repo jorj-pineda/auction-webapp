@@ -1,0 +1,4 @@
+node_modules/
+public/uploads
+auction.db
+.DS_Store

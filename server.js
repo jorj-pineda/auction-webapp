@@ -206,17 +206,28 @@ app.post('/admin/login', (req, res) => {
 
 app.get('/admin', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
-    
-    // Get settings, then items, then distinct active table numbers for the link list
-    db.get("SELECT is_paused, timer_ends_at FROM settings", (err, setting) => {
-        db.all("SELECT * FROM items ORDER BY group_id ASC, placement ASC", [], (err, rows) => {
-            db.all("SELECT DISTINCT group_id FROM items WHERE group_id > 0 ORDER BY group_id ASC", [], (err, groups) => {
+
+    // 1. Get Settings
+    db.get("SELECT * FROM settings", (err, row) => {
+        if (err) { console.error(err); return res.send("Error loading settings"); }
+        
+        const settings = row || { is_paused: 0, timer_ends_at: 0 };
+        
+        // 2. Get All Items
+        db.all("SELECT * FROM items ORDER BY id DESC", (err, items) => {
+            if (err) { console.error(err); return res.send("Error loading items"); }
+
+            // 3. Get Active Groups (Unique Group IDs)
+            db.all("SELECT DISTINCT group_id FROM items WHERE group_id IS NOT NULL ORDER BY group_id ASC", (err, groups) => {
+                if (err) { console.error(err); return res.send("Error loading groups"); }
+
+                // 4. Render the View with ALL data
                 res.render('admin', { 
-                    items: rows || [], 
-                    baseUrl: BASE_URL, 
-                    isPaused: setting ? setting.is_paused : 0, 
-                    timerEndsAt: setting ? setting.timer_ends_at : 0,
-                    activeGroups: groups || []
+                    items: items, 
+                    isPaused: settings.is_paused,
+                    timerEndsAt: settings.timer_ends_at,
+                    baseUrl: BASE_URL,
+                    activeGroups: groups || [] // <--- Ensure this line exists!
                 });
             });
         });

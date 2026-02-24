@@ -10,7 +10,7 @@ const app = express();
 const PORT = 3000;
 
 // *** CONFIGURATION ***
-const BASE_URL = 'https://tostan.ngrok.io';
+const BASE_URL = 'https://tostan.ngrok.io'; 
 const ADMIN_PASSWORD = 'Service25!'; 
 
 // 1. Setup Middleware
@@ -227,7 +227,7 @@ app.get('/admin', (req, res) => {
                     isPaused: settings.is_paused,
                     timerEndsAt: settings.timer_ends_at,
                     baseUrl: BASE_URL,
-                    activeGroups: groups || [] // <--- Ensure this line exists!
+                    activeGroups: groups || []
                 });
             });
         });
@@ -303,7 +303,8 @@ app.post('/admin/end', (req, res) => {
         db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BY bidder_name ASC", [], (err, rows) => {
             if (err || !rows || rows.length === 0) return res.redirect('/admin'); 
 
-            let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link,Table #\n";
+            // CHANGE: Table # to Group # in CSV header
+            let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link,Group #\n";
             const winners = {};
 
             rows.forEach(row => {
@@ -331,7 +332,8 @@ app.post('/admin/end', (req, res) => {
 
             for (const email in winners) {
                 const winner = winners[email];
-                let itemsListHtml = winner.items.map(item => `<li><strong>${item.name}</strong> (Table ${item.group_id || 'Gen'}) - $${item.current_bid.toFixed(2)}</li>`).join('');
+                // CHANGE: Table to Group in Email Body
+                let itemsListHtml = winner.items.map(item => `<li><strong>${item.name}</strong> (Group ${item.group_id || 'Gen'}) - $${item.current_bid.toFixed(2)}</li>`).join('');
                 
                 transporter.sendMail({
                     from: 'rooservicestation@gmail.com',
@@ -345,7 +347,8 @@ app.post('/admin/end', (req, res) => {
                         <p>Please head over to the checkout table to pay for your art and claim your items!</p>
                         <br>
                         <p>Thank you for supporting Tostan!</p>
-                        <p><em> Any questions can be brought up to the checkout table!</em></p>
+                        <p><em>This is an automated message, please do not reply.</em></p>
+                        <p><em>If you have any questions, contact us at servicestation@austincollege.edu</em></p>
                     `
                 }).catch(e => console.error(e));
             }

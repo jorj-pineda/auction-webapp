@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Table <%= groupId %> Collection</title>
+    <title>Group <%= groupId %> Collection</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
     <style>
@@ -37,8 +37,8 @@
         </div>
         <nav class="pt-8 px-4 text-center">
             <p class="text-gray-400 text-sm uppercase tracking-widest mb-1">Viewing Collection</p>
-            <h1 class="text-5xl font-display tracking-wide uppercase">Table <%= groupId %></h1>
-            <a href="/" class="inline-block mt-4 text-gray-300 hover:text-white underline text-sm">View All Tables</a>
+            <h1 class="text-5xl font-display tracking-wide uppercase">Group <%= groupId %></h1>
+            <a href="/" class="inline-block mt-4 text-gray-300 hover:text-white underline text-sm">View All Groups</a>
         </nav>
     </header>
 
@@ -49,7 +49,7 @@
                     <div class="relative">
                         <img src="<%= item.image_url %>" alt="<%= item.name %>" class="w-full h-64 object-cover">
                         <div class="absolute bottom-0 left-0 bg-black/70 text-white text-xs px-2 py-1 uppercase font-bold rounded-tr-lg">
-                            Table <%= item.group_id || 'Gen' %>
+                            Group <%= item.group_id || 'Gen' %>
                         </div>
                     </div>
                     
@@ -74,7 +74,7 @@
             
             <% if (items.length === 0) { %>
                 <div class="col-span-full text-center py-20 text-gray-500">
-                    <p class="text-xl">No items listed for Table <%= groupId %> yet.</p>
+                    <p class="text-xl">No items listed for Group <%= groupId %> yet.</p>
                 </div>
             <% } %>
         </div>

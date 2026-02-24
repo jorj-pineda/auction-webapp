@@ -44,16 +44,17 @@
         </div>
 
         <div class="col-span-full bg-white p-6 rounded-xl shadow-md border-t-8 border-purple-500">
-            <h2 class="text-xl font-display mb-2 uppercase text-purple-700">Table QR Links</h2>
-            <p class="text-sm text-gray-500 mb-4">Click to open the specific gallery page for each table (Group ID) you've created.</p>
+            <h2 class="text-xl font-display mb-2 uppercase text-purple-700">Group QR Links</h2>
+            <p class="text-sm text-gray-500 mb-4">Click to open the specific gallery page for each Group you've created.</p>
             <div class="flex flex-wrap gap-2">
-                <% activeGroups.forEach(function(g) { %>
-                    <a href="<%= baseUrl %>/table/<%= g.group_id %>" target="_blank" class="bg-purple-100 text-purple-800 px-4 py-2 rounded-lg font-bold hover:bg-purple-200 border border-purple-200">
-                        Table <%= g.group_id %> &rarr;
-                    </a>
-                <% }); %>
-                <% if (activeGroups.length === 0) { %>
-                    <span class="text-gray-400 italic">No groups assigned yet. Add an item with a "Table #" to see links here.</span>
+                <% if (activeGroups && activeGroups.length > 0) { %>
+                    <% activeGroups.forEach(function(g) { %>
+                        <a href="<%= baseUrl %>/table/<%= g.group_id %>" target="_blank" class="bg-purple-100 text-purple-800 px-4 py-2 rounded-lg font-bold hover:bg-purple-200 border border-purple-200">
+                            Group <%= g.group_id %> &rarr;
+                        </a>
+                    <% }); %>
+                <% } else { %>
+                    <span class="text-gray-400 italic">No groups assigned yet. Add an item with a "Group #" to see links here.</span>
                 <% } %>
             </div>
         </div>
@@ -97,7 +98,7 @@
                         </select>
                     </div>
                     <div>
-                         <label class="block text-gray-700 font-bold text-sm uppercase mb-1 text-purple-700">Table # (Group)</label>
+                        <label class="block text-gray-700 font-bold text-sm uppercase mb-1 text-purple-700">Group #</label>
                         <input type="number" name="groupId" value="0" placeholder="0" class="w-full p-2 border-2 border-purple-100 rounded-lg focus:border-purple-600 outline-none bg-gray-50 text-sm font-bold">
                     </div>
                 </div>
@@ -130,9 +131,11 @@
                             <h3 class="font-bold text-lg text-gray-900"><%= item.name %></h3>
                             <p class="text-sm text-gray-600">Current Bid: <strong class="text-green-600">$<%= Number(item.current_bid).toFixed(2) %></strong></p>
                             <p class="text-xs text-gray-400 mt-1 uppercase">
-                                <span class="bg-purple-100 text-purple-700 px-1 rounded">Table <%= item.group_id || 'Gen' %></span>
-                                | Tier <%= item.bid_type %>
-                                | Place: <%= item.placement %>
+                                <span class="bg-purple-100 text-purple-700 px-1 rounded">Group <%= item.group_id || 'Gen' %></span>
+                                |
+                                Tier <%= item.bid_type %>
+                                |
+                                Place: <%= item.placement %>
                             </p>
                             
                             <div class="mt-2 bg-white border p-2 rounded text-xs break-all">

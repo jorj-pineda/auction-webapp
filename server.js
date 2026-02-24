@@ -10,7 +10,7 @@ const app = express();
 const PORT = 3000;
 
 // *** CONFIGURATION ***
-const BASE_URL = 'https://fiercest-irene-lousily.ngrok-free.dev'; 
+const BASE_URL = 'https://tostan.ngrok.io';
 const ADMIN_PASSWORD = 'Service25!'; 
 
 // 1. Setup Middleware

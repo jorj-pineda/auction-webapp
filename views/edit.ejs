@@ -29,14 +29,21 @@
                 <textarea name="description" rows="4" required class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-600 outline-none bg-gray-50"><%= item.description %></textarea>
             </div>
 
-            <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <label class="block text-gray-700 font-bold text-sm uppercase mb-2">Bidding Rules (Tier)</label>
-                <select name="bidType" class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-600 outline-none font-bold text-blue-700">
-                    <option value="1" <%= item.bid_type === 1 ? 'selected' : '' %>>Tier 1 (Min Inc: $0.25 | Max Inc: $1.00)</option>
-                    <option value="2" <%= item.bid_type === 2 ? 'selected' : '' %>>Tier 2 (Min Inc: $0.50 | Max Inc: $5.00)</option>
-                    <option value="3" <%= item.bid_type === 3 ? 'selected' : '' %>>Tier 3 (Min Inc: $1.00 | Max Inc: $10.00)</option>
-                    <option value="4" <%= item.bid_type === 4 ? 'selected' : '' %>>Tier 4 (Min Inc: $1.00 | Max Inc: $25.00)</option>
-                </select>
+            <div class="grid grid-cols-2 gap-6">
+                <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                    <label class="block text-gray-700 font-bold text-sm uppercase mb-2">Bidding Rules</label>
+                    <select name="bidType" class="w-full p-3 border-2 border-gray-200 rounded-lg focus:border-blue-600 outline-none font-bold text-blue-700">
+                        <option value="1" <%= item.bid_type === 1 ? 'selected' : '' %>>Tier 1 ($0.25 - $1)</option>
+                        <option value="2" <%= item.bid_type === 2 ? 'selected' : '' %>>Tier 2 ($0.50 - $5)</option>
+                        <option value="3" <%= item.bid_type === 3 ? 'selected' : '' %>>Tier 3 ($1.00 - $10)</option>
+                        <option value="4" <%= item.bid_type === 4 ? 'selected' : '' %>>Tier 4 ($1.00 - $25)</option>
+                    </select>
+                </div>
+                
+                <div class="bg-purple-50 p-4 rounded-xl border border-purple-200">
+                    <label class="block text-purple-700 font-bold text-sm uppercase mb-2">Table # (Group)</label>
+                    <input type="number" name="groupId" value="<%= item.group_id || 0 %>" class="w-full p-3 border-2 border-purple-200 rounded-lg focus:border-purple-600 outline-none font-bold text-purple-700" placeholder="0">
+                </div>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">

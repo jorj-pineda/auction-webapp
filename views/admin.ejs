@@ -43,6 +43,21 @@
             </div>
         </div>
 
+        <div class="col-span-full bg-white p-6 rounded-xl shadow-md border-t-8 border-purple-500">
+            <h2 class="text-xl font-display mb-2 uppercase text-purple-700">Table QR Links</h2>
+            <p class="text-sm text-gray-500 mb-4">Click to open the specific gallery page for each table (Group ID) you've created.</p>
+            <div class="flex flex-wrap gap-2">
+                <% activeGroups.forEach(function(g) { %>
+                    <a href="<%= baseUrl %>/table/<%= g.group_id %>" target="_blank" class="bg-purple-100 text-purple-800 px-4 py-2 rounded-lg font-bold hover:bg-purple-200 border border-purple-200">
+                        Table <%= g.group_id %> &rarr;
+                    </a>
+                <% }); %>
+                <% if (activeGroups.length === 0) { %>
+                    <span class="text-gray-400 italic">No groups assigned yet. Add an item with a "Table #" to see links here.</span>
+                <% } %>
+            </div>
+        </div>
+
         <div class="col-span-full mb-4 p-6 rounded-xl shadow-lg border-4 bg-white border-blue-600 flex flex-col md:flex-row justify-between items-center gap-4">
             <div>
                 <h2 class="font-display text-2xl uppercase text-blue-600">Auction Timer</h2>
@@ -71,14 +86,20 @@
                     <textarea name="description" rows="3" required class="w-full p-2 border rounded-lg focus:border-black outline-none bg-gray-50"></textarea>
                 </div>
                 
-                <div>
-                    <label class="block text-gray-700 font-bold text-sm uppercase mb-1">Bidding Rules (Tier)</label>
-                    <select name="bidType" required class="w-full p-2 border rounded-lg focus:border-black outline-none bg-gray-50 text-sm font-bold text-blue-700">
-                        <option value="1">Tier 1 (Min Inc: $0.25 | Max Inc: $1.00)</option>
-                        <option value="2">Tier 2 (Min Inc: $0.50 | Max Inc: $5.00)</option>
-                        <option value="3">Tier 3 (Min Inc: $1.00 | Max Inc: $10.00)</option>
-                        <option value="4">Tier 4 (Min Inc: $1.00 | Max Inc: $25.00)</option>
-                    </select>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-gray-700 font-bold text-sm uppercase mb-1">Bidding Rules</label>
+                        <select name="bidType" required class="w-full p-2 border rounded-lg focus:border-black outline-none bg-gray-50 text-sm font-bold text-blue-700">
+                            <option value="1">Tier 1 ($0.25 - $1)</option>
+                            <option value="2">Tier 2 ($0.50 - $5)</option>
+                            <option value="3">Tier 3 ($1.00 - $10)</option>
+                            <option value="4">Tier 4 ($1.00 - $25)</option>
+                        </select>
+                    </div>
+                    <div>
+                         <label class="block text-gray-700 font-bold text-sm uppercase mb-1 text-purple-700">Table # (Group)</label>
+                        <input type="number" name="groupId" value="0" placeholder="0" class="w-full p-2 border-2 border-purple-100 rounded-lg focus:border-purple-600 outline-none bg-gray-50 text-sm font-bold">
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
@@ -100,7 +121,7 @@
         </div>
 
         <div class="bg-white p-6 rounded-xl shadow-md border-t-8 border-yellow-400">
-            <h2 class="text-xl font-display mb-4 border-b pb-2 uppercase">Current Inventory & Links</h2>
+            <h2 class="text-xl font-display mb-4 border-b pb-2 uppercase">Current Inventory</h2>
             <div class="space-y-4 max-h-[600px] overflow-y-auto pr-2">
                 <% items.forEach(function(item) { %>
                     <div class="border p-4 rounded-lg flex gap-4 items-start bg-gray-50">
@@ -108,12 +129,15 @@
                         <div class="flex-1">
                             <h3 class="font-bold text-lg text-gray-900"><%= item.name %></h3>
                             <p class="text-sm text-gray-600">Current Bid: <strong class="text-green-600">$<%= Number(item.current_bid).toFixed(2) %></strong></p>
-                            <p class="text-xs text-gray-400 mt-1 uppercase">Tier <%= item.bid_type %> | Place: <%= item.placement %></p>
+                            <p class="text-xs text-gray-400 mt-1 uppercase">
+                                <span class="bg-purple-100 text-purple-700 px-1 rounded">Table <%= item.group_id || 'Gen' %></span>
+                                | Tier <%= item.bid_type %>
+                                | Place: <%= item.placement %>
+                            </p>
                             
                             <div class="mt-2 bg-white border p-2 rounded text-xs break-all">
-                                <span class="font-bold text-gray-400 uppercase">QR URL:</span><br>
                                 <a href="<%= baseUrl %>/item/<%= item.id %>" target="_blank" class="text-blue-600 hover:underline">
-                                    <%= baseUrl %>/item/<%= item.id %>
+                                    View Page
                                 </a>
                             </div>
                         </div>

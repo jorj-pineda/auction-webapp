@@ -344,7 +344,9 @@ app.post('/admin/end', (req, res) => {
                         <p><strong>Total Due: $${winner.total.toFixed(2)}</strong></p>
                         <p>Please head over to the checkout table to pay for your art and claim your items!</p>
                         <br>
-                        <p>Thank you for supporting Austin College Service Station!</p>
+                        <p>Thank you for supporting Tostan!</p>
+                        <br>
+                        <p><em> Any questions can be brought up to the checkout table!</em></p>
                     `
                 }).catch(e => console.error(e));
             }

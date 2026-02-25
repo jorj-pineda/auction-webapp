@@ -47,7 +47,7 @@
             <% items.forEach(function(item) { %>
                 <div class="bg-white rounded-2xl overflow-hidden shadow-lg border-2 border-gray-100 transition hover:shadow-2xl hover:-translate-y-1 relative flex flex-col">
                     <div class="relative">
-                        <img src="<%= item.image_url %>" alt="<%= item.name %>" class="w-full h-64 object-cover">
+                        <img src="<%= item.image_url %>" alt="<%= item.name %>" loading="lazy" class="w-full h-64 object-cover">
                         <div class="absolute bottom-0 left-0 bg-black/70 text-white text-xs px-2 py-1 uppercase font-bold rounded-tr-lg">
                             Group <%= item.group_id || 'Gen' %>
                         </div>

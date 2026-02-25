@@ -12,6 +12,8 @@ const PORT = 3000;
 // *** CONFIGURATION ***
 const BASE_URL = 'https://tostan.ngrok.io'; 
 const ADMIN_PASSWORD = 'Service25!'; 
+// NEW: Email restriction domain
+const ALLOWED_DOMAIN = '@austincollege.edu';
 
 // 1. Setup Middleware
 app.set('view engine', 'ejs');
@@ -57,7 +59,7 @@ db.serialize(() => {
         group_id INTEGER DEFAULT 0
     )`);
 
-    // NEW: Bid History Table (For Runner-Ups)
+    // Bid History Table (For Runner-Ups & Stats)
     db.run(`CREATE TABLE IF NOT EXISTS bids (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         item_id INTEGER,
@@ -67,7 +69,6 @@ db.serialize(() => {
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
-    // Upgrade existing columns if needed
     const columns = ['start_price', 'placement', 'bid_type', 'group_id'];
     columns.forEach(col => {
         db.run(`ALTER TABLE items ADD COLUMN ${col} INTEGER DEFAULT 0`, (err) => {});
@@ -83,20 +84,19 @@ db.serialize(() => {
     });
 });
 
-// 4. Email Configuration with Pooling
+// 4. Email Configuration
 const transporter = nodemailer.createTransport({
     service: 'gmail',
-    pool: true, // NEW: Keeps connection open for sequential sending
+    pool: true, 
     maxConnections: 1,
     rateDelta: 1000,
-    rateLimit: 1, // Only 1 email per second
+    rateLimit: 1, 
     auth: {
         user: 'rooservicestation@gmail.com',
         pass: 'bqqx oobx yzjy mpvd' 
     }
 });
 
-// Helper for delays
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // 5. Routes
@@ -138,11 +138,21 @@ app.post('/bid/:id', (req, res) => {
     
         const id = req.params.id;
         const newBid = parseFloat(req.body.amount);
-        const email = req.body.email;
+        const email = req.body.email ? req.body.email.toLowerCase().trim() : '';
         const name = req.body.name;
 
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
             if (!item) return res.send("Item not found.");
+
+            // --- NEW: Email Validation ---
+            if (!email.endsWith(ALLOWED_DOMAIN)) {
+                return res.render('item', { 
+                    item: item, 
+                    message: `Error: You must use an ${ALLOWED_DOMAIN} email address to bid.`, 
+                    isPaused: setting ? setting.is_paused : 0, 
+                    timerEndsAt: setting ? setting.timer_ends_at : 0 
+                });
+            }
 
             // Tier Logic
             let minInc, maxInc;
@@ -162,7 +172,6 @@ app.post('/bid/:id', (req, res) => {
                 return res.render('item', { item: item, message: `To keep things fair, the maximum bid increase is $${maxInc.toFixed(2)}. Please bid $${maxValidBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
 
-            // Emails
             const itemLink = `${BASE_URL}/item/${id}`;
             const subjectLine = `Auction Status: ${item.name}`;
 
@@ -182,13 +191,10 @@ app.post('/bid/:id', (req, res) => {
                 }).catch(e => console.error(e));
             }
 
-            // NEW: Transaction - Update Item AND Insert History
             db.serialize(() => {
                 db.run(`UPDATE items SET current_bid = ?, bidder_email = ?, bidder_name = ? WHERE id = ?`, 
                     [newBid, email, name, id]
                 );
-                
-                // Save to history for runner-up logic later
                 db.run(`INSERT INTO bids (item_id, amount, email, name) VALUES (?, ?, ?, ?)`, 
                     [id, newBid, email, name]
                 );
@@ -230,12 +236,28 @@ app.get('/admin', (req, res) => {
             db.all("SELECT DISTINCT group_id FROM items WHERE group_id IS NOT NULL ORDER BY group_id ASC", (err, groups) => {
                 if (err) { console.error(err); return res.send("Error loading groups"); }
 
-                res.render('admin', { 
-                    items: items, 
-                    isPaused: settings.is_paused,
-                    timerEndsAt: settings.timer_ends_at,
-                    baseUrl: BASE_URL,
-                    activeGroups: groups || []
+                // Stats Calculation
+                db.get(`SELECT 
+                    SUM(current_bid) as total_raised, 
+                    COUNT(DISTINCT bidder_email) as unique_bidders 
+                    FROM items 
+                    WHERE bidder_email IS NOT NULL AND bidder_email != ''`, 
+                (err, itemStats) => {
+                    
+                    db.get("SELECT COUNT(*) as total_bids FROM bids", (err, bidStats) => {
+                        res.render('admin', { 
+                            items: items, 
+                            isPaused: settings.is_paused,
+                            timerEndsAt: settings.timer_ends_at,
+                            baseUrl: BASE_URL,
+                            activeGroups: groups || [],
+                            stats: {
+                                raised: itemStats ? itemStats.total_raised : 0,
+                                bidders: itemStats ? itemStats.unique_bidders : 0,
+                                totalBids: bidStats ? bidStats.total_bids : 0
+                            }
+                        });
+                    });
                 });
             });
         });
@@ -304,30 +326,25 @@ app.post('/admin/resume', (req, res) => {
     db.run("UPDATE settings SET is_paused = 0", () => res.redirect('/admin'));
 });
 
-// --- NEW "END AUCTION" LOGIC ---
 app.post('/admin/end', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
 
     console.log("Starting End Auction Sequence...");
 
-    // 1. Pause Auction
     db.run("UPDATE settings SET is_paused = 1, timer_ends_at = 0", async () => {
         
-        // 2. Get All Winners
         db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BY bidder_name ASC", [], async (err, items) => {
             if (err || !items || items.length === 0) return res.redirect('/admin'); 
 
             let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link,Group #,Runner Up Name,Runner Up Email,Runner Up Bid\n";
             const winners = {};
 
-            // 3. Loop through items to get Runner-Ups (Async)
             for (const row of items) {
                 const itemLink = `${BASE_URL}/item/${row.id}`;
                 const safeName = (row.bidder_name || 'Anonymous').replace(/"/g, '""');
                 const safeItemName = (row.name || '').replace(/"/g, '""');
                 const tableNum = row.group_id > 0 ? row.group_id : 'General';
                 
-                // Find Runner Up: Highest bid that is NOT the winner's email
                 const runnerUp = await new Promise((resolve) => {
                     db.get("SELECT * FROM bids WHERE item_id = ? AND email != ? ORDER BY amount DESC LIMIT 1", 
                         [row.id, row.bidder_email], 
@@ -348,7 +365,6 @@ app.post('/admin/end', (req, res) => {
                 winners[row.bidder_email].total += row.current_bid;
             }
 
-            // 4. Send Admin Report (One time)
             try {
                 await transporter.sendMail({
                     from: 'rooservicestation@gmail.com',
@@ -362,11 +378,9 @@ app.post('/admin/end', (req, res) => {
                 console.error("Failed to send admin report:", e);
             }
 
-            // 5. Send User Emails with Throttling (One by one)
             const winnerEmails = Object.keys(winners);
             console.log(`Sending emails to ${winnerEmails.length} winners...`);
 
-            // Run in background so the browser doesn't hang
             (async () => {
                 for (const email of winnerEmails) {
                     const winner = winners[email];
@@ -393,13 +407,36 @@ app.post('/admin/end', (req, res) => {
                         console.error(`Failed email to ${winner.name}:`, e);
                     }
                     
-                    // CRITICAL: Wait 1 second before next email to avoid Gmail blocks
                     await delay(1000); 
                 }
                 console.log("All emails sent.");
             })();
 
             res.redirect('/admin');
+        });
+    });
+});
+
+// --- NEW: RESET AUCTION (Danger Zone) ---
+app.post('/admin/reset', (req, res) => {
+    if (!req.session.loggedIn) return res.redirect('/admin/login');
+
+    console.log("RESETTING AUCTION DATA...");
+
+    db.serialize(() => {
+        // 1. Delete all history
+        db.run("DELETE FROM bids", (err) => {
+            if (err) console.error("Error clearing bids history:", err);
+        });
+
+        // 2. Reset Items to starting price and remove winners
+        db.run(`UPDATE items SET current_bid = start_price, bidder_email = NULL, bidder_name = NULL`, (err) => {
+            if (err) console.error("Error resetting items:", err);
+        });
+        
+        // 3. Reset Timer & Pause state
+        db.run("UPDATE settings SET is_paused = 1, timer_ends_at = 0", () => {
+             res.redirect('/admin');
         });
     });
 });

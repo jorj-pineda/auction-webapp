@@ -396,7 +396,9 @@ app.post('/admin/end', (req, res) => {
                                 <p>Bidding has officially closed, and you are the winning bidder for the following item(s):</p>
                                 <ul>${itemsListHtml}</ul>
                                 <p><strong>Total Due: $${winner.total.toFixed(2)}</strong></p>
-                                <p>Please head over to the checkout table to pay for your art and claim your items!</p>
+                                <p>Please head over to the checkout table WHEN ANNOUNCED (8:45ish) to pay for your art and claim your items!</p>
+                                <p>If you need to leave early, go ahead and check out now</p>
+                                <p>If you have ALREADY left, please email us at servicestation@austincollege.edu and we can arrange a pickup time for you.</p>
                                 <br>
                                 <p>Thank you for supporting Tostan!</p>
                                 <p><em>This is an automated message, please do not reply.</em></p>

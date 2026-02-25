@@ -42,6 +42,7 @@ const db = new sqlite3.Database('./auction.db', (err) => {
 });
 
 db.serialize(() => {
+    // Main Items Table
     db.run(`CREATE TABLE IF NOT EXISTS items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT,
@@ -56,18 +57,21 @@ db.serialize(() => {
         group_id INTEGER DEFAULT 0
     )`);
 
-    // Safely upgrade existing database columns
+    // NEW: Bid History Table (For Runner-Ups)
+    db.run(`CREATE TABLE IF NOT EXISTS bids (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER,
+        amount REAL,
+        email TEXT,
+        name TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // Upgrade existing columns if needed
     const columns = ['start_price', 'placement', 'bid_type', 'group_id'];
     columns.forEach(col => {
-        db.run(`ALTER TABLE items ADD COLUMN ${col} INTEGER DEFAULT 0`, (err) => {
-            // Ignore errors if column exists
-        });
+        db.run(`ALTER TABLE items ADD COLUMN ${col} INTEGER DEFAULT 0`, (err) => {});
     });
-
-    // Backfill defaults if needed
-    db.run(`UPDATE items SET start_price = current_bid WHERE start_price = 0`);
-    db.run(`UPDATE items SET bid_type = 1 WHERE bid_type IS NULL OR bid_type = 0`);
-    // Default group is 0 (General/No specific table)
 
     db.run(`CREATE TABLE IF NOT EXISTS settings (id INTEGER PRIMARY KEY, is_paused INTEGER DEFAULT 0, timer_ends_at INTEGER DEFAULT 0)`);
     db.run(`ALTER TABLE settings ADD COLUMN timer_ends_at INTEGER DEFAULT 0`, (err) => {});
@@ -79,14 +83,21 @@ db.serialize(() => {
     });
 });
 
-// 4. Email Configuration
+// 4. Email Configuration with Pooling
 const transporter = nodemailer.createTransport({
     service: 'gmail',
+    pool: true, // NEW: Keeps connection open for sequential sending
+    maxConnections: 1,
+    rateDelta: 1000,
+    rateLimit: 1, // Only 1 email per second
     auth: {
         user: 'rooservicestation@gmail.com',
         pass: 'bqqx oobx yzjy mpvd' 
     }
 });
+
+// Helper for delays
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 // 5. Routes
 
@@ -98,7 +109,6 @@ app.get('/', (req, res) => {
     });
 });
 
-// NEW: Route for specific tables/groups
 app.get('/table/:id', (req, res) => {
     const groupId = req.params.id;
     db.get("SELECT timer_ends_at FROM settings", (err, setting) => {
@@ -134,17 +144,12 @@ app.post('/bid/:id', (req, res) => {
         db.get("SELECT * FROM items WHERE id = ?", [id], (err, item) => {
             if (!item) return res.send("Item not found.");
 
-            // --- STRICT 4-TIER LOGIC ---
+            // Tier Logic
             let minInc, maxInc;
-            if (item.bid_type === 1) {        // Tier 1: Tiny pieces
-                minInc = 0.25; maxInc = 1.00;
-            } else if (item.bid_type === 2) { // Tier 2: Medium pieces
-                minInc = 0.50; maxInc = 5.00;
-            } else if (item.bid_type === 4) { // Tier 4: Expensive/Premium Art
-                minInc = 1.00; maxInc = 25.00;
-            } else {                          // Tier 3: Large pieces (Default)
-                minInc = 1.00; maxInc = 10.00;
-            }
+            if (item.bid_type === 1) { minInc = 0.25; maxInc = 1.00; }
+            else if (item.bid_type === 2) { minInc = 0.50; maxInc = 5.00; }
+            else if (item.bid_type === 4) { minInc = 1.00; maxInc = 25.00; }
+            else { minInc = 1.00; maxInc = 10.00; }
 
             const isFirstBid = !item.bidder_name;
             const minValidBid = isFirstBid ? item.start_price : item.current_bid + minInc;
@@ -157,6 +162,7 @@ app.post('/bid/:id', (req, res) => {
                 return res.render('item', { item: item, message: `To keep things fair, the maximum bid increase is $${maxInc.toFixed(2)}. Please bid $${maxValidBid.toFixed(2)} or less.`, isPaused: setting ? setting.is_paused : 0, timerEndsAt: setting ? setting.timer_ends_at : 0 });
             }
 
+            // Emails
             const itemLink = `${BASE_URL}/item/${id}`;
             const subjectLine = `Auction Status: ${item.name}`;
 
@@ -176,17 +182,24 @@ app.post('/bid/:id', (req, res) => {
                 }).catch(e => console.error(e));
             }
 
-            db.run(`UPDATE items SET current_bid = ?, bidder_email = ?, bidder_name = ? WHERE id = ?`, 
-                [newBid, email, name, id], 
-                (err) => {
-                    res.render('item', { 
-                        item: { ...item, current_bid: newBid, bidder_name: name }, 
-                        message: "Bid placed successfully!",
-                        isPaused: setting ? setting.is_paused : 0,
-                        timerEndsAt: setting ? setting.timer_ends_at : 0
-                    });
-                }
-            );
+            // NEW: Transaction - Update Item AND Insert History
+            db.serialize(() => {
+                db.run(`UPDATE items SET current_bid = ?, bidder_email = ?, bidder_name = ? WHERE id = ?`, 
+                    [newBid, email, name, id]
+                );
+                
+                // Save to history for runner-up logic later
+                db.run(`INSERT INTO bids (item_id, amount, email, name) VALUES (?, ?, ?, ?)`, 
+                    [id, newBid, email, name]
+                );
+
+                res.render('item', { 
+                    item: { ...item, current_bid: newBid, bidder_name: name }, 
+                    message: "Bid placed successfully!",
+                    isPaused: setting ? setting.is_paused : 0,
+                    timerEndsAt: setting ? setting.timer_ends_at : 0
+                });
+            });
         });
     });
 });
@@ -207,21 +220,16 @@ app.post('/admin/login', (req, res) => {
 app.get('/admin', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
 
-    // 1. Get Settings
     db.get("SELECT * FROM settings", (err, row) => {
         if (err) { console.error(err); return res.send("Error loading settings"); }
-        
         const settings = row || { is_paused: 0, timer_ends_at: 0 };
         
-        // 2. Get All Items
         db.all("SELECT * FROM items ORDER BY id DESC", (err, items) => {
             if (err) { console.error(err); return res.send("Error loading items"); }
 
-            // 3. Get Active Groups (Unique Group IDs)
             db.all("SELECT DISTINCT group_id FROM items WHERE group_id IS NOT NULL ORDER BY group_id ASC", (err, groups) => {
                 if (err) { console.error(err); return res.send("Error loading groups"); }
 
-                // 4. Render the View with ALL data
                 res.render('admin', { 
                     items: items, 
                     isPaused: settings.is_paused,
@@ -296,62 +304,100 @@ app.post('/admin/resume', (req, res) => {
     db.run("UPDATE settings SET is_paused = 0", () => res.redirect('/admin'));
 });
 
+// --- NEW "END AUCTION" LOGIC ---
 app.post('/admin/end', (req, res) => {
     if (!req.session.loggedIn) return res.redirect('/admin/login');
 
-    db.run("UPDATE settings SET is_paused = 1, timer_ends_at = 0", () => {
-        db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BY bidder_name ASC", [], (err, rows) => {
-            if (err || !rows || rows.length === 0) return res.redirect('/admin'); 
+    console.log("Starting End Auction Sequence...");
 
-            // CHANGE: Table # to Group # in CSV header
-            let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link,Group #\n";
+    // 1. Pause Auction
+    db.run("UPDATE settings SET is_paused = 1, timer_ends_at = 0", async () => {
+        
+        // 2. Get All Winners
+        db.all("SELECT * FROM items WHERE bidder_email IS NOT NULL AND bidder_email != '' ORDER BY bidder_name ASC", [], async (err, items) => {
+            if (err || !items || items.length === 0) return res.redirect('/admin'); 
+
+            let csvContent = "Winner Name,Winner Email,Item Name,Winning Bid,Item Link,Group #,Runner Up Name,Runner Up Email,Runner Up Bid\n";
             const winners = {};
 
-            rows.forEach(row => {
+            // 3. Loop through items to get Runner-Ups (Async)
+            for (const row of items) {
                 const itemLink = `${BASE_URL}/item/${row.id}`;
                 const safeName = (row.bidder_name || 'Anonymous').replace(/"/g, '""');
                 const safeItemName = (row.name || '').replace(/"/g, '""');
                 const tableNum = row.group_id > 0 ? row.group_id : 'General';
                 
-                csvContent += `"${safeName}","${row.bidder_email}","${safeItemName}","$${row.current_bid.toFixed(2)}","${itemLink}","${tableNum}"\n`;
+                // Find Runner Up: Highest bid that is NOT the winner's email
+                const runnerUp = await new Promise((resolve) => {
+                    db.get("SELECT * FROM bids WHERE item_id = ? AND email != ? ORDER BY amount DESC LIMIT 1", 
+                        [row.id, row.bidder_email], 
+                        (err, r) => resolve(r)
+                    );
+                });
+
+                const runnerName = runnerUp ? runnerUp.name.replace(/"/g, '""') : "None";
+                const runnerEmail = runnerUp ? runnerUp.email : "None";
+                const runnerBid = runnerUp ? `$${runnerUp.amount.toFixed(2)}` : "0.00";
+
+                csvContent += `"${safeName}","${row.bidder_email}","${safeItemName}","$${row.current_bid.toFixed(2)}","${itemLink}","${tableNum}","${runnerName}","${runnerEmail}","${runnerBid}"\n`;
 
                 if (!winners[row.bidder_email]) {
                     winners[row.bidder_email] = { name: row.bidder_name, items: [], total: 0 };
                 }
                 winners[row.bidder_email].items.push(row);
                 winners[row.bidder_email].total += row.current_bid;
-            });
-
-            transporter.sendMail({
-                from: 'rooservicestation@gmail.com',
-                to: 'rooservicestation@gmail.com', 
-                subject: '🚨 AUCTION ENDED: Final Winners Report',
-                html: `<h3>The auction is closed.</h3><p>Attached is the final list of winners grouped by name.</p>`,
-                attachments: [{ filename: 'tostan_auction_winners.csv', content: csvContent }]
-            }).catch(e => console.error(e));
-
-            for (const email in winners) {
-                const winner = winners[email];
-                // CHANGE: Table to Group in Email Body
-                let itemsListHtml = winner.items.map(item => `<li><strong>${item.name}</strong> (Group ${item.group_id || 'Gen'}) - $${item.current_bid.toFixed(2)}</li>`).join('');
-                
-                transporter.sendMail({
-                    from: 'rooservicestation@gmail.com',
-                    to: email,
-                    subject: '🎉 You won at the Tostan Art Auction!',
-                    html: `
-                        <h2>Congratulations ${winner.name}!</h2>
-                        <p>Bidding has officially closed, and you are the winning bidder for the following item(s):</p>
-                        <ul>${itemsListHtml}</ul>
-                        <p><strong>Total Due: $${winner.total.toFixed(2)}</strong></p>
-                        <p>Please head over to the checkout table to pay for your art and claim your items!</p>
-                        <br>
-                        <p>Thank you for supporting Tostan!</p>
-                        <p><em>This is an automated message, please do not reply.</em></p>
-                        <p><em>If you have any questions, contact us at servicestation@austincollege.edu</em></p>
-                    `
-                }).catch(e => console.error(e));
             }
+
+            // 4. Send Admin Report (One time)
+            try {
+                await transporter.sendMail({
+                    from: 'rooservicestation@gmail.com',
+                    to: 'rooservicestation@gmail.com', 
+                    subject: '🚨 AUCTION ENDED: Final Winners Report',
+                    html: `<h3>The auction is closed.</h3><p>Attached is the final list of winners and runner-ups.</p>`,
+                    attachments: [{ filename: 'tostan_auction_final.csv', content: csvContent }]
+                });
+                console.log("Admin report sent.");
+            } catch (e) {
+                console.error("Failed to send admin report:", e);
+            }
+
+            // 5. Send User Emails with Throttling (One by one)
+            const winnerEmails = Object.keys(winners);
+            console.log(`Sending emails to ${winnerEmails.length} winners...`);
+
+            // Run in background so the browser doesn't hang
+            (async () => {
+                for (const email of winnerEmails) {
+                    const winner = winners[email];
+                    let itemsListHtml = winner.items.map(item => `<li><strong>${item.name}</strong> (Group ${item.group_id || 'Gen'}) - $${item.current_bid.toFixed(2)}</li>`).join('');
+                    
+                    try {
+                        await transporter.sendMail({
+                            from: 'rooservicestation@gmail.com',
+                            to: email,
+                            subject: '🎉 You won at the Tostan Art Auction!',
+                            html: `
+                                <h2>Congratulations ${winner.name}!</h2>
+                                <p>Bidding has officially closed, and you are the winning bidder for the following item(s):</p>
+                                <ul>${itemsListHtml}</ul>
+                                <p><strong>Total Due: $${winner.total.toFixed(2)}</strong></p>
+                                <p>Please head over to the checkout table to pay for your art and claim your items!</p>
+                                <br>
+                                <p>Thank you for supporting Tostan!</p>
+                                <p><em>This is an automated message, please do not reply.</em></p>
+                            `
+                        });
+                        console.log(`Email sent to ${winner.name}`);
+                    } catch (e) {
+                        console.error(`Failed email to ${winner.name}:`, e);
+                    }
+                    
+                    // CRITICAL: Wait 1 second before next email to avoid Gmail blocks
+                    await delay(1000); 
+                }
+                console.log("All emails sent.");
+            })();
 
             res.redirect('/admin');
         });

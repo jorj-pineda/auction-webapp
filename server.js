@@ -1,3 +1,5 @@
+require('dotenv').config();
+const express = require('express');
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const bodyParser = require('body-parser');
@@ -10,8 +12,8 @@ const app = express();
 const PORT = 3000;
 
 // *** CONFIGURATION ***
-const BASE_URL = 'https://tostan.ngrok.io'; 
-const ADMIN_PASSWORD = 'Service25!'; 
+const BASE_URL = process.env.BASE_URL; 
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD; 
 // NEW: Email restriction domain
 const ALLOWED_DOMAIN = '@austincollege.edu';
 
@@ -20,7 +22,7 @@ app.set('view engine', 'ejs');
 app.use(express.static('public'));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(session({
-    secret: 'secret-key',
+    secret: process.env.SESSION_SECRET, 
     resave: false,
     saveUninitialized: true
 }));
@@ -87,13 +89,10 @@ db.serialize(() => {
 // 4. Email Configuration
 const transporter = nodemailer.createTransport({
     service: 'gmail',
-    pool: true, 
-    maxConnections: 1,
-    rateDelta: 1000,
-    rateLimit: 1, 
+    // ... pool settings ...
     auth: {
-        user: 'rooservicestation@gmail.com',
-        pass: 'bqqx oobx yzjy mpvd' 
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS 
     }
 });
 

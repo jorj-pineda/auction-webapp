@@ -89,7 +89,10 @@ db.serialize(() => {
 // 4. Email Configuration
 const transporter = nodemailer.createTransport({
     service: 'gmail',
-    // ... pool settings ...
+    pool: true, 
+    maxConnections: 1,
+    rateDelta: 1000,
+    rateLimit: 1, 
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS 

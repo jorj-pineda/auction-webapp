@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tostan Art Auction | Jorge Pineda</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet">
+    <style>
+        .font-display { font-family: 'Fredoka One', cursive; }
+        .font-body { font-family: 'Nunito', sans-serif; }
+        html { scroll-behavior: smooth; }
+        .gallery-img {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .gallery-img:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .stat-card {
+            transition: transform 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-body text-gray-800">
+
+    <!-- HEADER -->
+    <header class="bg-black text-white">
+        <div class="h-4 w-full flex">
+            <div class="flex-1 bg-red-600"></div>
+            <div class="flex-1 bg-yellow-400"></div>
+            <div class="flex-1 bg-green-600"></div>
+        </div>
+
+        <nav class="pt-16 pb-10 px-4">
+            <div class="container mx-auto text-center">
+                <h1 class="text-white text-6xl md:text-8xl font-display tracking-wide uppercase mb-3">Tostan</h1>
+                <p class="text-yellow-400 text-xl md:text-2xl font-bold tracking-widest uppercase mb-1">Service Station Art Auction</p>
+                <p class="text-yellow-400 text-2xl md:text-3xl font-display tracking-widest">2026</p>
+                <p class="text-gray-400 text-sm mt-6 tracking-wider">Full-Stack Real-Time Auction Platform &mdash; Built by <strong class="text-white">Jorge Pineda</strong></p>
+                <div class="mt-8 flex justify-center gap-4">
+                    <a href="#about" class="bg-yellow-400 hover:bg-yellow-500 text-black font-black py-3 px-8 rounded-lg transition uppercase tracking-wide shadow-md">About</a>
+                    <a href="#gallery" class="border-2 border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black font-black py-3 px-8 rounded-lg transition uppercase tracking-wide">Gallery</a>
+                    <a href="https://github.com/jorj-pineda/auction-webapp" target="_blank" class="border-2 border-white text-white hover:bg-white hover:text-black font-black py-3 px-8 rounded-lg transition uppercase tracking-wide">GitHub</a>
+                </div>
+            </div>
+        </nav>
+
+        <div class="w-full h-8 bg-red-600 rounded-t-[50%] mt-4 -mb-1"></div>
+    </header>
+
+    <!-- IMPACT STATS -->
+    <section class="bg-red-600 py-12">
+        <div class="container mx-auto px-4">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+                <div class="stat-card bg-black rounded-xl p-6 text-center shadow-lg">
+                    <p class="text-3xl md:text-4xl font-display text-yellow-400">160+</p>
+                    <p class="text-white text-sm font-bold uppercase tracking-wider mt-2">Live Attendees</p>
+                </div>
+                <div class="stat-card bg-black rounded-xl p-6 text-center shadow-lg">
+                    <p class="text-3xl md:text-4xl font-display text-green-400">130+</p>
+                    <p class="text-white text-sm font-bold uppercase tracking-wider mt-2">Art Pieces</p>
+                </div>
+                <div class="stat-card bg-black rounded-xl p-6 text-center shadow-lg">
+                    <p class="text-3xl md:text-4xl font-display text-yellow-400">$700+</p>
+                    <p class="text-white text-sm font-bold uppercase tracking-wider mt-2">Raised for Charity</p>
+                </div>
+                <div class="stat-card bg-black rounded-xl p-6 text-center shadow-lg">
+                    <p class="text-3xl md:text-4xl font-display text-green-400">0</p>
+                    <p class="text-white text-sm font-bold uppercase tracking-wider mt-2">Downtime</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ABOUT -->
+    <section id="about" class="py-20 px-4">
+        <div class="container mx-auto max-w-4xl">
+            <h2 class="text-4xl font-display text-center mb-4 tracking-wider uppercase">About the Project</h2>
+            <div class="w-24 h-1 bg-yellow-400 mx-auto mb-10"></div>
+
+            <p class="text-lg text-gray-600 text-center mb-12 max-w-2xl mx-auto">
+                A full-stack, real-time auction platform built for the <strong>Austin College Service Station</strong> to facilitate their annual charity event benefiting <a href="https://tostan.org/" target="_blank" class="text-red-600 hover:underline font-bold">Tostan</a>. Digitized the entire silent auction process, replacing paper bids with a secure, concurrent web application.
+            </p>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <!-- Features -->
+                <div class="bg-white rounded-xl border-4 border-black p-8 shadow-lg">
+                    <h3 class="font-display text-2xl mb-6 text-gray-900 uppercase tracking-wider">Features</h3>
+                    <ul class="space-y-3 text-gray-700">
+                        <li class="flex items-start gap-3">
+                            <span class="text-green-600 font-bold text-lg mt-0.5">&#10003;</span>
+                            <span><strong>Real-Time Bidding</strong> &mdash; Instant updates with concurrency protection against race conditions</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-green-600 font-bold text-lg mt-0.5">&#10003;</span>
+                            <span><strong>Live Admin Dashboard</strong> &mdash; Real-time stats: money raised, active bidders, total bids</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-green-600 font-bold text-lg mt-0.5">&#10003;</span>
+                            <span><strong>Outbid Notifications</strong> &mdash; Email alerts sent when users are outbid</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-green-600 font-bold text-lg mt-0.5">&#10003;</span>
+                            <span><strong>Lazy Loading</strong> &mdash; 130+ high-res images with sub-200ms load times</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-green-600 font-bold text-lg mt-0.5">&#10003;</span>
+                            <span><strong>Anti-Troll Bidding</strong> &mdash; Smart tier-based logic with rational min/max bids</span>
+                        </li>
+                        <li class="flex items-start gap-3">
+                            <span class="text-green-600 font-bold text-lg mt-0.5">&#10003;</span>
+                            <span><strong>Email Automation</strong> &mdash; Throttled SMTP queue for winner notifications</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Tech Stack -->
+                <div class="bg-white rounded-xl border-4 border-black p-8 shadow-lg">
+                    <h3 class="font-display text-2xl mb-6 text-gray-900 uppercase tracking-wider">Tech Stack</h3>
+                    <div class="space-y-4">
+                        <div class="bg-gray-50 rounded-lg p-4 border-l-4 border-red-600">
+                            <p class="font-bold text-gray-900">Backend</p>
+                            <p class="text-gray-600">Node.js, Express.js</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-4 border-l-4 border-yellow-400">
+                            <p class="font-bold text-gray-900">Database</p>
+                            <p class="text-gray-600">SQLite3 (Serialized for transaction safety)</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-4 border-l-4 border-green-600">
+                            <p class="font-bold text-gray-900">Frontend</p>
+                            <p class="text-gray-600">EJS Templating, Tailwind CSS</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-4 border-l-4 border-black">
+                            <p class="font-bold text-gray-900">Infrastructure</p>
+                            <p class="text-gray-600">Self-hosted via ngrok tunnel</p>
+                        </div>
+                        <div class="bg-gray-50 rounded-lg p-4 border-l-4 border-red-600">
+                            <p class="font-bold text-gray-900">Other</p>
+                            <p class="text-gray-600">Nodemailer (SMTP), multer (uploads), concurrency-safe transactions</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- GALLERY -->
+    <section id="gallery" class="bg-black py-20 px-4">
+        <div class="container mx-auto max-w-6xl">
+            <h2 class="text-4xl font-display text-center mb-4 tracking-wider uppercase text-white">Auction Gallery</h2>
+            <div class="w-24 h-1 bg-yellow-400 mx-auto mb-4"></div>
+            <p class="text-gray-400 text-center mb-12 text-lg">A sample of the 130+ art pieces auctioned at the event</p>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="gallery-img rounded-xl overflow-hidden border-4 border-red-600">
+                    <img src="images/plant-sketch.jpg" alt="Pencil sketch of a potted plant" class="w-full h-72 object-cover" loading="lazy">
+                </div>
+                <div class="gallery-img rounded-xl overflow-hidden border-4 border-yellow-400">
+                    <img src="images/apple-painting.jpg" alt="Abstract apple painting with gold accents" class="w-full h-72 object-cover" loading="lazy">
+                </div>
+                <div class="gallery-img rounded-xl overflow-hidden border-4 border-green-600">
+                    <img src="images/red-apple.jpg" alt="Acrylic painting of a red apple" class="w-full h-72 object-cover" loading="lazy">
+                </div>
+                <div class="gallery-img rounded-xl overflow-hidden border-4 border-red-600">
+                    <img src="images/horses-watercolor.jpg" alt="Purple watercolor of two horses" class="w-full h-72 object-cover" loading="lazy">
+                </div>
+                <div class="gallery-img rounded-xl overflow-hidden border-4 border-yellow-400">
+                    <img src="images/abstract-orange.jpg" alt="Abstract orange painting with figures" class="w-full h-72 object-cover" loading="lazy">
+                </div>
+                <div class="gallery-img rounded-xl overflow-hidden border-4 border-green-600">
+                    <img src="images/dog-portrait.jpg" alt="White chalk dog portrait on black background" class="w-full h-72 object-cover" loading="lazy">
+                </div>
+                <div class="gallery-img rounded-xl overflow-hidden border-4 border-red-600">
+                    <img src="images/tools-sketch.jpg" alt="Detailed pencil sketch of tools" class="w-full h-72 object-cover" loading="lazy">
+                </div>
+                <div class="gallery-img rounded-xl overflow-hidden border-4 border-yellow-400">
+                    <img src="images/heart-glass.jpg" alt="Hand-painted glass with heart designs" class="w-full h-72 object-cover" loading="lazy">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="bg-black border-t border-gray-800 text-white text-center py-8">
+        <div class="container mx-auto px-4">
+            <p class="font-display text-sm uppercase tracking-widest mb-3">Austin College Service Station</p>
+            <p class="text-gray-400 text-sm">Built by <strong class="text-white">Jorge Pineda</strong> &mdash;
+                <a href="mailto:jorgepineda0310@gmail.com" class="text-yellow-400 hover:underline">jorgepineda0310@gmail.com</a>
+            </p>
+            <p class="text-gray-500 text-xs mt-4">
+                <a href="https://github.com/jorj-pineda/auction-webapp" target="_blank" class="hover:text-white transition">View on GitHub</a>
+                &nbsp;&bull;&nbsp; Open Source under MIT License
+            </p>
+        </div>
+    </footer>
+
+</body>
+</html>
